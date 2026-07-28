@@ -19,27 +19,48 @@ def auditar_archivos_masivos(lista_archivos):
         try:
             wb = openpyxl.load_workbook(archivo, data_only=True)
             hojas_disponibles = wb.sheetnames
-            hoja1 = wb[hojas_disponibles[0]]
-            hoja2 = wb[hojas_disponibles[1]] if len(hojas_disponibles) > 1 else hoja1
+            hoja1 = wb[hojas_disponibles]
+            hoja2 = wb[hojas_disponibles] if len(hojas_disponibles) > 1 else hoja1
             
             nombre_archivo = archivo.name
             errores_en_este_archivo = 0
 
-            # CONFIGURACIÓN PÁGINA 1
+            # -------------------------------------------------------------------------
+            # CONFIGURACIÓN PÁGINA 1 (ACTUALIZADA CON TU NUEVO MAPA)
+            # -------------------------------------------------------------------------
             campos_pagina1 = [
+                # Antecedentes de la detención
                 ("EQUIPO", hoja1, ["G7"]),
                 ("HOROMETRO", hoja1, ["G13"]),
                 ("TURNO", hoja1, ["G19"]),
                 ("ORDEN DE PEDIDO / SALIDA DE BODEGA", hoja1, ["G25"]),
-                ("FECHA/HORA INICIO (Fecha)", hoja1, ["X9"]),
-                ("FECHA/HORA INICIO (Hora)", hoja1, ["AB9"]),
-                ("FECHA/HORA FINAL (Fecha)", hoja1, ["X11"]),
-                ("FECHA/HORA FINAL (Hora)", hoja1, ["AB11"]),
-                ("UBICACIÓN: TALLER", hoja1, ["R21"]),
-                ("UBICACIÓN: TERRENO", hoja1, ["Y21"]),
+                
+                # Tiempos
+                ("INICIO (Fecha y Hora)", hoja1, ["X9", "AB9"]),
+                ("FINAL (Fecha y Hora)", hoja1, ["X11", "AB11"]),
+                
+                # Ubicación
+                ("UBICACIÓN (Taller o Terreno)", hoja1, ["R21", "Y21"]),
+                
+                # Motivo detención
+                ("MOTIVO DETENCIÓN DEL EQUIPO", hoja1, ["AB25"]),
+                
+                # Tipo de Detención / Responsabilidad (Basta con que se marque una opción)
+                ("TIPO DETENCIÓN: PLANEADO", hoja1, ["AQ13"]),
+                ("TIPO DETENCIÓN: IMPREVISTO", hoja1, ["AQ15"]),
+                ("TIPO DETENCIÓN: ACCIDENTE", hoja1, ["AQ17"]),
+                
+                # Responsabilidad (Dealer o Cliente)
+                ("RESPONSABILIDAD: DEALER (FINNING)", hoja1, ["AQ13", "AQ15", "AQ17"]),
+                ("RESPONSABILIDAD: CUSTOMER (CLIENTE)", hoja1, ["AW13", "AW15", "AW17"]),
+                
+                # Equipo Entregado (Si / No)
+                ("EQUIPO ENTREGADO (SI o NO)", hoja1, ["BL10", "BO10"])
             ]
 
+            # -------------------------------------------------------------------------
             # CONFIGURACIÓN PÁGINA 2
+            # -------------------------------------------------------------------------
             campos_pagina2 = [
                 ("N° PIEZA QUE FALLÓ", hoja2, ["B189"]),
                 ("DESCRIPCIÓN DE LA PIEZA", hoja2, ["E189"]),
@@ -54,6 +75,7 @@ def auditar_archivos_masivos(lista_archivos):
                 ("TECNICO RESPONSABLE", hoja2, ["BD239", "BD243"]),
             ]
 
+            # Unimos ambas listas para procesar uniformemente
             todos_los_campos = [("Página 1", n, h, c) for n, h, c in campos_pagina1] + \
                                [("Página 2", n, h, c) for n, h, c in campos_pagina2]
 
@@ -66,7 +88,7 @@ def auditar_archivos_masivos(lista_archivos):
                     
                     if valor is not None and texto_limpio not in ["", "no", "none"]:
                         campo_completado = True
-                        break # Con una celda llena, el bloque es válido
+                        break # Con una celda llena del grupo, el bloque es válido
                 
                 # SI NO CUMPLE, LO AGREGAMOS AL REPORTE DE ERRORES
                 if not campo_completado:
@@ -75,7 +97,7 @@ def auditar_archivos_masivos(lista_archivos):
                         "Archivo Excel": nombre_archivo,
                         "Página": num_pagina,
                         "Campo Incompleto": nombre,
-                        "Celdas que debió revisar": ", ".join(lista_celdas),
+                        "Celdas obligatorias": ", ".join(lista_celdas),
                         "Estado": "❌ Vacío (Faltante)"
                     })
             
@@ -87,14 +109,14 @@ def auditar_archivos_masivos(lista_archivos):
                 "Archivo Excel": archivo.name,
                 "Página": "Error Técnico",
                 "Campo Incompleto": "No se pudo leer el archivo",
-                "Celdas que debió revisar": "N/A",
+                "Celdas obligatorias": "N/A",
                 "Estado": f"⚠️ Error: {str(e)}"
             })
             archivos_con_errores += 1
 
     return pd.DataFrame(reporte_errores), total_archivos, archivos_con_errores
 
-# NUEVO CARGADOR CON MULTIPLE_FILES ACTIVADO
+# Cargador masivo de archivos
 archivos_cargados = st.file_uploader(
     "📂 Sube una o varias Órdenes de Trabajo al mismo tiempo (.xlsx)", 
     type=["xlsx"], 
@@ -105,7 +127,6 @@ if archivos_cargados:
     with st.spinner("Auditando lote de archivos..."):
         df_errores, cant_total, cant_con_errores = auditar_archivos_masivos(archivos_cargados)
         
-        # MÁSTERS KPIs
         cant_perfectos = cant_total - cant_con_errores
         
         st.subheader("📊 Resumen de la Auditoría Masiva")
@@ -117,9 +138,9 @@ if archivos_cargados:
         st.write("---")
         
         if df_errores.empty:
-            st.success("🎉 ¡Excelente noticias! Todos los archivos cargados están rellenados al 100%. No se encontraron celdas vacías.")
-            # Gráfico feliz (Todo correcto)
-            fig = px.pie(values=[100], names=["100% Correctos"], color_discrete_sequence=["#2ecc71"], hole=0.4)
+            st.success("🎉 ¡Excelenses noticias! Todos los archivos cargados están rellenados al 100%. No se encontraron celdas vacías.")
+            # Gráfico de éxito absoluto
+            fig = px.pie(values=[1], names=["100% Correctos"], color_discrete_sequence=["#2ecc71"], hole=0.4)
             st.plotly_chart(fig)
         else:
             col_izq, col_der = st.columns([1.4, 0.6])
@@ -127,7 +148,7 @@ if archivos_cargados:
             with col_izq:
                 st.subheader("⚠️ Registro Centralizado de Campos Vacíos")
                 st.markdown("La siguiente lista muestra exactamente qué archivo y qué celda requiere corrección:")
-                st.dataframe(df_errores, use_container_width=True, height=400)
+                st.dataframe(df_errores, use_container_width=True, height=450)
             
             with col_der:
                 st.subheader("📉 Distribución de Archivos")
