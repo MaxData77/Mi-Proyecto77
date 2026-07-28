@@ -243,3 +243,64 @@ with col_right:
                 'Equipo': datos_ot['equipo'],
                 'Orden': datos_ot['orden'],
                 'Turno': datos_ot['turno'],
+                'Cant. Faltantes': datos_ot['faltantes'],
+                'Detalle Campos Faltantes': datos_ot['detalle'],
+                'Estado': datos_ot['estado']
+            })
+
+            for campo, estado_campo in datos_ot['campos_validados'].items():
+                if campo not in conteo_campos:
+                    conteo_campos[campo] = {'Cumple': 0, 'No cumple': 0}
+                conteo_campos[campo][estado_campo] += 1
+
+        df_resumen = pd.DataFrame(lista_resumen)
+
+        total_ot = len(df_resumen)
+        ot_con_observacion = int((df_resumen['Estado'] == 'No cumple').sum())
+        hallazgos_totales = int(df_resumen['Cant. Faltantes'].sum())
+        ot_completas = int((df_resumen['Estado'] == 'Cumple').sum())
+
+        # --- MÉTRICAS SUPERIORES ---
+        m1, m2, m3, m4 = st.columns(4)
+        valores = [total_ot, ot_con_observacion, hallazgos_totales, ot_completas]
+        titulos = ["OT Revisadas", "OT con observación", "Hallazgos detectados", "OT completa"]
+        for m, txt, val in zip([m1, m2, m3, m4], titulos, valores):
+            with m:
+                st.markdown(f'<div class="metric-card"><h3>{txt}</h3><h1>{val}</h1></div>', unsafe_allow_html=True)
+
+        # --- GRÁFICAS ---
+        g1, g2 = st.columns(2)
+        with g1:
+            st.write("**Campos Revisados**")
+            df_conteo = pd.DataFrame([
+                {
+                    'Campo': campo,
+                    'Porcentaje': (v['No cumple'] / total_ot) * 100 if total_ot > 0 else 0
+                }
+                for campo, v in conteo_campos.items()
+            ]).sort_values('Porcentaje', ascending=True)
+
+            fig_bar = px.bar(
+                df_conteo, x='Porcentaje', y='Campo', orientation='h',
+                color_discrete_sequence=[COLOR_ROJO]
+            )
+            fig_bar.update_layout(height=550, margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        with g2:
+            st.write("**Total OT Revisadas**")
+            df_pie = pd.DataFrame({
+                'Estado': ['Cumple', 'No cumple'],
+                'Cantidad': [ot_completas, ot_con_observacion]
+            })
+            fig_pie = px.pie(
+                df_pie, values='Cantidad', names='Estado', hole=0.6,
+                color='Estado',
+                color_discrete_map={'Cumple': COLOR_VERDE, 'No cumple': COLOR_ROJO}
+            )
+            fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        # --- TABLA RESUMEN ---
+        st.write("**Resumen por OT**")
+        st.dataframe(df_resumen, use_container_width=True)
