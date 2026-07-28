@@ -214,14 +214,14 @@ with col_right:
         g1, g2 = st.columns(2)
         with g1:
             st.write("**Campos Revisados**")
-            # CORREGIDO: Diccionario inicial cerrado de forma estricta y limpia
+            # CORREGIDO: Diccionario inicial cerrado con sintaxis válida completa
             df_empty_bar = pd.DataFrame({'Campo': ['Esperando archivos...'], 'Porcentaje': [0]})
             fig_bar = px.bar(df_empty_bar, x='Porcentaje', y='Campo', orientation='h', color_discrete_sequence=['#CCCCCC'])
             fig_bar.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig_bar, use_container_width=True)
         with g2:
             st.write("**Total OT Revisadas**")
-            # CORREGIDO: Diccionario inicial cerrado de forma estricta y limpia
+            # CORREGIDO: Diccionario inicial cerrado con sintaxis válida completa
             df_empty_pie = pd.DataFrame({'Estado': ['Sin datos'], 'Cantidad': [1]})
             fig_pie = px.pie(df_empty_pie, values='Cantidad', names='Estado', hole=0.6, color_discrete_sequence=['#CCCCCC'])
             fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
