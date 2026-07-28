@@ -171,7 +171,7 @@ def procesar_archivo_ot(file_bytes):
 
         # --- CONSOLIDACIÓN DEL ESTADO FINAL ---
         cant_faltantes = len(campos_con_hallazgo)
-        if cant_faltantes > 1:
+        if cant_faltantes > 0:
             resultado["faltantes"] = cant_faltantes
             resultado["detalle"] = ", ".join(campos_con_hallazgo)
             resultado["estado"] = "No cumple"
@@ -189,7 +189,7 @@ def procesar_archivo_ot(file_bytes):
 st.markdown("<h2 style='text-align: center; color: black; font-weight: bold; font-size: 32px;'>GESTION Y CONTROL EN LOS PROCESOS OPERACIONALES</h2>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center; color: black; font-size: 22px;'>Revisión de Ordenes de Trabajo OT</h3>", unsafe_allow_html=True)
 
-col_left, col_right = st.columns([1, 4])
+col_left, col_right = st.columns()
 
 # ================= COLUMNA IZQUIERDA (Cargador) =================
 with col_left:
@@ -212,7 +212,7 @@ with col_right:
         for m, txt in zip([m1, m2, m3, m4], ["OT Revisadas", "OT con observación", "Hallazgos detectados", "OT completa"]):
             with m: st.markdown(f'<div class="metric-card"><h3>{txt}</h3><h1>0</h1></div>', unsafe_allow_html=True)
 
-        g1, g2 = st.columns([2, 1])
+        g1, g2 = st.columns()
         with g1:
             st.write("**Campos Revisados**")
             df_empty_bar = pd.DataFrame({'Campo': ['Esperando archivos...'], 'Porcentaje': [0]})
