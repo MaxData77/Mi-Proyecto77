@@ -147,6 +147,7 @@ def auditar_archivos_masivos(lista_archivos):
             # Detectar palabra "cambio" en E205, E211, E216 -> Requiere B189 obligatorio
             # -------------------------------------------------------------------------
             contiene_cambio = False
+            celda_origen_cambio = ""
             for c_id in ["E205", "E211", "E216"]:
                 val_c = hoja2[c_id].value
                 if val_c and "cambio" in str(val_c).lower():
@@ -166,7 +167,6 @@ def auditar_archivos_masivos(lista_archivos):
                         "Detalle del Error": f"Obligatorio rellenar por palabra 'cambio' detectada en {celda_origen_cambio}", "Criticidad": "🚨 CRÍTICO"
                     })
             else:
-                # Si NO contiene la palabra cambio, B189 se evalúa de manera normal (No Crítica)
                 if val_b189 is None or txt_b189 in ["", "no", "none"]:
                     errores_en_este_archivo += 1
                     reporte_errores.append({
@@ -176,3 +176,6 @@ def auditar_archivos_masivos(lista_archivos):
                     })
 
             if errores_en_este_archivo > 0:
+                archivos_con_errores += 1
+
+        except Exception as e:
