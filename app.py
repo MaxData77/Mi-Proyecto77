@@ -19,42 +19,40 @@ def auditar_archivos_masivos(lista_archivos):
         try:
             wb = openpyxl.load_workbook(archivo, data_only=True)
             hojas_disponibles = wb.sheetnames
-            hoja1 = wb[hojas_disponibles]
-            hoja2 = wb[hojas_disponibles] if len(hojas_disponibles) > 1 else hoja1
+            
+            # --- ASIGNACIÓN FLEXIBLE DE HOJAS ---
+            # Intentamos buscar nombres clave comunes o asignamos por índice físico seguro
+            if "OT FORMATO IMPRIMIR" in hojas_disponibles:
+                hoja1 = wb["OT FORMATO IMPRIMIR"]
+            else:
+                hoja1 = wb[hojas_disponibles[0]] # Usa la primera pestaña disponible
+                
+            # Para la página 2, si hay más de una hoja usamos la segunda, sino usamos la misma primera
+            if len(hojas_disponibles) > 1:
+                hoja2 = wb[hojas_disponibles[1]]
+            else:
+                hoja2 = hoja1
             
             nombre_archivo = archivo.name
             errores_en_este_archivo = 0
 
             # -------------------------------------------------------------------------
-            # CONFIGURACIÓN PÁGINA 1 (ACTUALIZADA CON TU NUEVO MAPA)
+            # CONFIGURACIÓN PÁGINA 1
             # -------------------------------------------------------------------------
             campos_pagina1 = [
-                # Antecedentes de la detención
                 ("EQUIPO", hoja1, ["G7"]),
                 ("HOROMETRO", hoja1, ["G13"]),
                 ("TURNO", hoja1, ["G19"]),
                 ("ORDEN DE PEDIDO / SALIDA DE BODEGA", hoja1, ["G25"]),
-                
-                # Tiempos
                 ("INICIO (Fecha y Hora)", hoja1, ["X9", "AB9"]),
                 ("FINAL (Fecha y Hora)", hoja1, ["X11", "AB11"]),
-                
-                # Ubicación
                 ("UBICACIÓN (Taller o Terreno)", hoja1, ["R21", "Y21"]),
-                
-                # Motivo detención
                 ("MOTIVO DETENCIÓN DEL EQUIPO", hoja1, ["AB25"]),
-                
-                # Tipo de Detención / Responsabilidad (Basta con que se marque una opción)
                 ("TIPO DETENCIÓN: PLANEADO", hoja1, ["AQ13"]),
                 ("TIPO DETENCIÓN: IMPREVISTO", hoja1, ["AQ15"]),
                 ("TIPO DETENCIÓN: ACCIDENTE", hoja1, ["AQ17"]),
-                
-                # Responsabilidad (Dealer o Cliente)
                 ("RESPONSABILIDAD: DEALER (FINNING)", hoja1, ["AQ13", "AQ15", "AQ17"]),
                 ("RESPONSABILIDAD: CUSTOMER (CLIENTE)", hoja1, ["AW13", "AW15", "AW17"]),
-                
-                # Equipo Entregado (Si / No)
                 ("EQUIPO ENTREGADO (SI o NO)", hoja1, ["BL10", "BO10"])
             ]
 
@@ -75,7 +73,6 @@ def auditar_archivos_masivos(lista_archivos):
                 ("TECNICO RESPONSABLE", hoja2, ["BD239", "BD243"]),
             ]
 
-            # Unimos ambas listas para procesar uniformemente
             todos_los_campos = [("Página 1", n, h, c) for n, h, c in campos_pagina1] + \
                                [("Página 2", n, h, c) for n, h, c in campos_pagina2]
 
@@ -83,14 +80,17 @@ def auditar_archivos_masivos(lista_archivos):
                 campo_completado = False
                 
                 for celda_id in lista_celdas:
-                    valor = hoja_obj[celda_id].value
-                    texto_limpio = str(valor).strip().lower() if valor is not None else ""
-                    
-                    if valor is not None and texto_limpio not in ["", "no", "none"]:
-                        campo_completado = True
-                        break # Con una celda llena del grupo, el bloque es válido
+                    # Validación de seguridad: verificar que la celda exista en la hoja cargada
+                    try:
+                        valor = hoja_obj[celda_id].value
+                        texto_limpio = str(valor).strip().lower() if valor is not None else ""
+                        
+                        if valor is not None and texto_limpio not in ["", "no", "none"]:
+                            campo_completado = True
+                            break
+                    except:
+                        pass # Si la celda está fuera de límites, la salta
                 
-                # SI NO CUMPLE, LO AGREGAMOS AL REPORTE DE ERRORES
                 if not campo_completado:
                     errores_en_este_archivo += 1
                     reporte_errores.append({
@@ -108,7 +108,7 @@ def auditar_archivos_masivos(lista_archivos):
             reporte_errores.append({
                 "Archivo Excel": archivo.name,
                 "Página": "Error Técnico",
-                "Campo Incompleto": "No se pudo leer el archivo",
+                "Campo Incompleto": "Error general al procesar estructura",
                 "Celdas obligatorias": "N/A",
                 "Estado": f"⚠️ Error: {str(e)}"
             })
@@ -138,8 +138,7 @@ if archivos_cargados:
         st.write("---")
         
         if df_errores.empty:
-            st.success("🎉 ¡Excelenses noticias! Todos los archivos cargados están rellenados al 100%. No se encontraron celdas vacías.")
-            # Gráfico de éxito absoluto
+            st.success("🎉 ¡Excelente noticias! Todos los archivos cargados están rellenados al 100%. No se encontraron celdas vacías.")
             fig = px.pie(values=[1], names=["100% Correctos"], color_discrete_sequence=["#2ecc71"], hole=0.4)
             st.plotly_chart(fig)
         else:
@@ -147,8 +146,7 @@ if archivos_cargados:
             
             with col_izq:
                 st.subheader("⚠️ Registro Centralizado de Campos Vacíos")
-                st.markdown("La siguiente lista muestra exactamente qué archivo y qué celda requiere corrección:")
-                st.dataframe(df_errores, use_container_width=True, height=450)
+                st.dataframe(df_errores[["Archivo Excel", "Página", "Campo Incompleto", "Celdas obligatorias", "Estado"]], use_container_width=True, height=450)
             
             with col_der:
                 st.subheader("📉 Distribución de Archivos")
