@@ -7,7 +7,7 @@ import plotly.express as px
 st.set_page_config(page_title="Auditor Masivo de OTs", layout="wide")
 
 st.title("📋 Auditor Masivo de Órdenes de Trabajo")
-st.markdown("Carga múltiples archivos Excel en lote. Clasificación automática por nivel de criticidad de celdas vacías.")
+st.markdown("Carga múltiples archivos Excel en lote. Clasificación automática con motor de alertas y reglas de negocio avanzadas.")
 st.write("---")
 
 def auditar_archivos_masivos(lista_archivos):
@@ -34,7 +34,7 @@ def auditar_archivos_masivos(lista_archivos):
             errores_en_este_archivo = 0
 
             # -------------------------------------------------------------------------
-            # CONFIGURACIÓN DE CAMPOS Y SU NIVEL DE CRITICIDAD
+            # 1. EVALUACIÓN ESTÁNDAR DE CAMPOS VACÍOS (PÁGINA 1 Y PÁGINA 2)
             # -------------------------------------------------------------------------
             definicion_campos = [
                 # --- PÁGINA 1 ---
@@ -53,8 +53,17 @@ def auditar_archivos_masivos(lista_archivos):
                 ("Página 1", "RESPONSABILIDAD: CUSTOMER (CLIENTE)", hoja1, ["AW13", "AW15", "AW17"], "🚨 CRÍTICO"),
                 ("Página 1", "EQUIPO ENTREGADO (SI o NO)", hoja1, ["BL10", "BO10"], "🚨 CRÍTICO"),
                 
+                # --- PÁGINA 1: INFORMACIÓN DEL TRABAJO ---
+                ("Página 1", "HORA INICIO ACTIVIDAD", hoja1, ["B42"], "🚨 CRÍTICO"),
+                ("Página 1", "HORA TERMINO ACTIVIDAD", hoja1, ["F42"], "🚨 CRÍTICO"),
+                ("Página 1", "Nº ORDEN SERVICIO", hoja1, ["J42"], "🚨 CRÍTICO"),
+                ("Página 1", "CÓDIGO COMPONENTE SMCS", hoja1, ["Q42"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "CÓDIGO MODIFICADOR", hoja1, ["T42"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "CÓDIGO TRABAJO", hoja1, ["W42"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "TIPO TAREA", hoja1, ["BO42"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "TAREA PRINCIPAL", hoja1, ["BV42"], "⚠️ NO CRÍTICO"),
+
                 # --- PÁGINA 2 ---
-                ("Página 2", "N° PIEZA QUE FALLÓ", hoja2, ["B189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "DESCRIPCIÓN DE LA PIEZA", hoja2, ["E189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "CANTIDAD", hoja2, ["X189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "CÓDIGO SERVICIO", hoja2, ["AA189"], "⚠️ NO CRÍTICO"),
@@ -62,111 +71,108 @@ def auditar_archivos_masivos(lista_archivos):
                 ("Página 2", "DESCRIPCIÓN DEL GRUPO", hoja2, ["AJ186", "AJ189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "¿Llegó al fin de su vida útil?", hoja2, ["AR189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "COMENTARIOS", hoja2, ["AU189"], "⚠️ NO CRÍTICO"),
-                ("Página 2", "RESUMEN ANÁLISIS DE FALLA", hoja2, ["E205", "E211", "E216"], "🚨 CRÍTICO"),
-                ("Página 2", "VALIDACIÓN DE OT POR JEFE TURNO", hoja2, ["C238", "C244"], "🚨 CRÍTICO"),
-                ("Página 2", "TECNICO RESPONSABLE", hoja2, ["BD239", "BD243"], "🚨 CRÍTICO"),
+                ("Página 2", "VALIDACIÓN OT: NOMBRE JEFE TURNO", hoja2, ["C238"], "🚨 CRÍTICO"),
+                ("Página 2", "VALIDACIÓN OT: RUT JEFE TURNO", hoja2, ["C244"], "🚨 CRÍTICO"),
+                ("Página 2", "TECNICO RESPONSABLE: NOMBRE", hoja2, ["BD239"], "🚨 CRÍTICO"),
+                ("Página 2", "TECNICO RESPONSABLE: RUT", hoja2, ["BD243"], "🚨 CRÍTICO"),
             ]
 
+            # Procesamos validación base de celdas vacías
             for num_pagina, nombre, hoja_obj, lista_celdas, criticidad in definicion_campos:
                 campo_completado = False
-                
                 for celda_id in lista_celdas:
-                    try:
-                        valor = hoja_obj[celda_id].value
-                        texto_limpio = str(valor).strip().lower() if valor is not None else ""
-                        if valor is not None and texto_limpio not in ["", "no", "none"]:
-                            campo_completado = True
-                            break
-                    except:
-                        pass
+                    valor = hoja_obj[celda_id].value
+                    texto_limpio = str(valor).strip().lower() if valor is not None else ""
+                    if valor is not None and texto_limpio not in ["", "no", "none"]:
+                        campo_completado = True
+                        break
                 
                 if not campo_completado:
                     errores_en_este_archivo += 1
                     reporte_errores.append({
                         "Archivo Excel": nombre_archivo,
                         "Página": num_pagina,
-                        "Campo Incompleto": nombre,
+                        "Campo / Alerta": nombre,
                         "Celdas Mapeadas": ", ".join(lista_celdas),
+                        "Detalle del Error": "Celda vacía u omitida",
                         "Criticidad": criticidad
                     })
+
+            # -------------------------------------------------------------------------
+            # 2. MOTOR DE ALERTAS INTELIGENTES (CONTENIDO ESPECÍFICO)
+            # -------------------------------------------------------------------------
             
+            # Alerta Z42: SIN INFORMACION
+            val_z42 = hoja1["Z42"].value
+            if val_z42 and str(val_z42).strip().upper() == "SIN INFORMACION":
+                errores_en_este_archivo += 1
+                reporte_errores.append({
+                    "Archivo Excel": nombre_archivo, "Página": "Página 1",
+                    "Campo / Alerta": "DESCRIPCIÓN DEL SÍNTOMA", "Celdas Mapeadas": "Z42",
+                    "Detalle del Error": "Contiene texto prohibido 'SIN INFORMACION'", "Criticidad": "🚨 CRÍTICO"
+                })
+
+            # Alerta AO42: Código 156
+            val_ao42 = hoja1["AO42"].value
+            if val_ao42 and str(val_ao42).strip() == "156":
+                errores_en_este_archivo += 1
+                reporte_errores.append({
+                    "Archivo Excel": nombre_archivo, "Página": "Página 1",
+                    "Campo / Alerta": "CÓDIGO SÍNTOMA", "Celdas Mapeadas": "AO42",
+                    "Detalle del Error": "Alerta: Se detectó el código restringido '156'", "Criticidad": "🚨 CRÍTICO"
+                })
+
+            # Alerta AR42: OTROS
+            val_ar42 = hoja1["AR42"].value
+            if val_ar42 and str(val_ar42).strip().upper() == "OTROS":
+                errores_en_este_archivo += 1
+                reporte_errores.append({
+                    "Archivo Excel": nombre_archivo, "Página": "Página 1",
+                    "Campo / Alerta": "DESCRIPCIÓN DE LA CAUSA", "Celdas Mapeadas": "AR42",
+                    "Detalle del Error": "Contiene texto no permitido 'OTROS'", "Criticidad": "🚨 CRÍTICO"
+                })
+
+            # Alerta BH42: Códigos de causa críticos
+            val_bh42 = hoja1["BH42"].value
+            if val_bh42 and str(val_bh42).strip().replace(",", ".") in ["6.6", "7.1"]:
+                errores_en_este_archivo += 1
+                reporte_errores.append({
+                    "Archivo Excel": nombre_archivo, "Página": "Página 1",
+                    "Campo / Alerta": "CÓDIGO CAUSA CRÍTICO", "Celdas Mapeadas": "BH42",
+                    "Detalle del Error": f"Contiene código de falla crítico ({val_bh42})", "Criticidad": "🚨 CRÍTICO"
+                })
+
+            # -------------------------------------------------------------------------
+            # 3. REGLA CONDICIONAL AVANZADA (PÁGINA 2)
+            # Detectar palabra "cambio" en E205, E211, E216 -> Requiere B189 obligatorio
+            # -------------------------------------------------------------------------
+            contiene_cambio = False
+            for c_id in ["E205", "E211", "E216"]:
+                val_c = hoja2[c_id].value
+                if val_c and "cambio" in str(val_c).lower():
+                    contiene_cambio = True
+                    celda_origen_cambio = c_id
+                    break
+            
+            val_b189 = hoja2["B189"].value
+            txt_b189 = str(val_b189).strip().lower() if val_b189 is not None else ""
+            
+            if contiene_cambio:
+                if val_b189 is None or txt_b189 in ["", "no", "none"]:
+                    errores_en_este_archivo += 1
+                    reporte_errores.append({
+                        "Archivo Excel": nombre_archivo, "Página": "Página 2",
+                        "Campo / Alerta": "N° PIEZA QUE FALLÓ (Condicional)", "Celdas Mapeadas": "B189",
+                        "Detalle del Error": f"Obligatorio rellenar por palabra 'cambio' detectada en {celda_origen_cambio}", "Criticidad": "🚨 CRÍTICO"
+                    })
+            else:
+                # Si NO contiene la palabra cambio, B189 se evalúa de manera normal (No Crítica)
+                if val_b189 is None or txt_b189 in ["", "no", "none"]:
+                    errores_en_este_archivo += 1
+                    reporte_errores.append({
+                        "Archivo Excel": nombre_archivo, "Página": "Página 2",
+                        "Campo / Alerta": "N° PIEZA QUE FALLÓ", "Celdas Mapeadas": "B189",
+                        "Detalle del Error": "Celda vacía u omitida", "Criticidad": "⚠️ NO CRÍTICO"
+                    })
+
             if errores_en_este_archivo > 0:
-                archivos_con_errores += 1
-
-        except Exception as e:
-            reporte_errores.append({
-                "Archivo Excel": archivo.name,
-                "Página": "Error Técnico",
-                "Campo Incompleto": "Error general de formato",
-                "Celdas Mapeadas": "N/A",
-                "Criticidad": "🚨 CRÍTICO"
-            })
-            archivos_con_errores += 1
-
-    return pd.DataFrame(reporte_errores), total_archivos, archivos_con_errores
-
-# Cargador masivo de archivos
-archivos_cargados = st.file_uploader(
-    "📂 Sube una o varias Órdenes de Trabajo al mismo tiempo (.xlsx)", 
-    type=["xlsx"], 
-    accept_multiple_files=True
-)
-
-if archivos_cargados:
-    with st.spinner("Auditando criticidad en lote..."):
-        df_errores, cant_total, cant_con_errores = auditar_archivos_masivos(archivos_cargados)
-        cant_perfectos = cant_total - cant_con_errores
-        
-        st.subheader("📊 Resumen de la Auditoría Masiva")
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Archivos Subidos", cant_total)
-        m2.metric("Archivos 100% Completos ✅", cant_perfectos)
-        m3.metric("Archivos con Errores ❌", cant_con_errores)
-        
-        st.write("---")
-        
-        if df_errores.empty:
-            st.success("🎉 ¡Excelente! No se encontraron celdas vacías en ninguna jerarquía de criticidad.")
-            fig = px.pie(values=[1], names=["100% Correctos"], color_discrete_sequence=["#2ecc71"], hole=0.4)
-            st.plotly_chart(fig)
-        else:
-            col_izq, col_der = st.columns([1.3, 0.7])
-            
-            with col_izq:
-                st.subheader("⚠️ Registro de Omisiones por Gravedad")
-                
-                selector_crit = st.radio("Filtrar por nivel de riesgo:", ["Mostrar Todos los Errores", "Solo Errores 🚨 CRÍTICO", "Solo Advertencias ⚠️ NO CRÍTICO"], horizontal=True)
-                
-                if selector_crit == "Solo Errores 🚨 CRÍTICO":
-                    df_mostrar = df_errores[df_errores['Criticidad'] == "🚨 CRÍTICO"]
-                elif selector_crit == "Solo Advertencias ⚠️ NO CRÍTICO":
-                    df_mostrar = df_errores[df_errores['Criticidad'] == "⚠️ NO CRÍTICO"]
-                else:
-                    df_mostrar = df_errores
-                
-                st.dataframe(df_mostrar[["Archivo Excel", "Página", "Campo Incompleto", "Celdas Mapeadas", "Criticidad"]], use_container_width=True, height=450)
-            
-            with col_der:
-                st.subheader("📈 Volumen de Errores por Criticidad")
-                conteo_crit = df_errores['Criticidad'].value_counts().reset_index()
-                conteo_crit.columns = ['Nivel', 'Cantidad']
-                
-                # REGLA AJUSTADA: Asegurar la proporción del agujero central (hole) e incluir trazo de separación
-                fig = px.pie(
-                    conteo_crit, 
-                    values="Cantidad", 
-                    names="Nivel", 
-                    hole=0.5,
-                    color="Nivel",
-                    color_discrete_map={"🚨 CRÍTICO": "#e74c3c", "⚠️ NO CRÍTICO": "#f1c40f"}
-                )
-                fig.update_traces(
-                    textinfo='percent+label',
-                    marker=dict(line=dict(color='#FFFFFF', width=2)) # Añade un borde blanco elegante entre segmentos
-                )
-                fig.update_layout(
-                    margin=dict(l=20, r=20, t=10, b=10), 
-                    height=350,
-                    showlegend=True
-                )
-                st.plotly_chart(fig, use_container_width=True)
