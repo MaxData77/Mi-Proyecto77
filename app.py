@@ -34,7 +34,7 @@ def auditar_archivos_masivos(lista_archivos):
             errores_en_este_archivo = 0
 
             # -------------------------------------------------------------------------
-            # 1. EVALUACIÓN ESTÁNDAR DE CAMPOS VACÍOS (PÁGINA 1 Y PÁGINA 2)
+            # 1. LISTA UNIFICADA DE CAMPOS VACÍOS (PÁGINA 1 Y PÁGINA 2)
             # -------------------------------------------------------------------------
             definicion_campos = [
                 # --- PÁGINA 1 ---
@@ -77,6 +77,7 @@ def auditar_archivos_masivos(lista_archivos):
                 ("Página 2", "TECNICO RESPONSABLE: RUT", hoja2, ["BD243"], "🚨 CRÍTICO"),
             ]
 
+            # Procesamos validación base de celdas vacías
             for num_pagina, nombre, hoja_obj, lista_celdas, criticidad in definicion_campos:
                 campo_completado = False
                 for celda_id in lista_celdas:
@@ -149,26 +150,20 @@ def auditar_archivos_masivos(lista_archivos):
             val_b189 = hoja2["B189"].value
             txt_b189 = str(val_b189).strip().lower() if val_b189 is not None else ""
             
+            # Si B189 está vacío, evaluamos si es crítico o advertencia según la palabra "cambio"
             if val_b189 is None or txt_b189 in ["", "no", "none"]:
                 errores_en_este_archivo += 1
-                if contiene_cambio:
-                    reporte_errores.append({
-                        "Archivo Excel": nombre_archivo,
-                        "Página": "Página 2",
-                        "Campo / Alerta": "N° PIEZA QUE FALLÓ (Condicional)",
-                        "Celdas Mapeadas": "B189",
-                        "Detalle del Error": f"Obligatorio rellenar por palabra 'cambio' detectada en {celda_origen_cambio}",
-                        "Criticidad": "🚨 CRÍTICO"
-                    })
-                else:
-                    reporte_errores.append({
-                        "Archivo Excel": nombre_archivo,
-                        "Página": "Página 2",
-                        "Campo / Alerta": "N° PIEZA QUE FALLÓ",
-                        "Celdas Mapeadas": "B189",
-                        "Detalle del Error": "Celda vacía u omitida",
-                        "Criticidad": "⚠️ NO CRÍTICO"
-                    })
+                crit_final = "🚨 CRÍTICO" if contiene_cambio else "⚠️ NO CRÍTICO"
+                msg_final = f"Obligatorio rellenar por palabra 'cambio' detectada en {celda_origen_cambio}" if contiene_cambio else "Celda vacía u omitida"
+                
+                reporte_errores.append({
+                    "Archivo Excel": nombre_archivo,
+                    "Página": "Página 2",
+                    "Campo / Alerta": "N° PIEZA QUE FALLÓ",
+                    "Celdas Mapeadas": "B189",
+                    "Detalle del Error": msg_final,
+                    "Criticidad": crit_final
+                })
 
             if errores_en_este_archivo > 0:
                 archivos_con_errores += 1
@@ -178,3 +173,8 @@ def auditar_archivos_masivos(lista_archivos):
                 "Archivo Excel": archivo.name,
                 "Página": "Error Técnico",
                 "Campo / Alerta": "Error de estructura",
+                "Celdas Mapeadas": "N/A",
+                "Detalle del Error": f"No se pudo procesar: {str(e)}",
+                "Criticidad": "🚨 CRÍTICO"
+            })
+            archivos_con_errores += 1
