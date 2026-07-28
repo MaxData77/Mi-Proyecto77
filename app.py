@@ -35,7 +35,6 @@ def auditar_archivos_masivos(lista_archivos):
 
             # -------------------------------------------------------------------------
             # CONFIGURACIÓN DE CAMPOS Y SU NIVEL DE CRITICIDAD
-            # Estructura: (Página, Nombre, Hoja, [Celdas], Criticidad)
             # -------------------------------------------------------------------------
             definicion_campos = [
                 # --- PÁGINA 1 ---
@@ -136,7 +135,6 @@ if archivos_cargados:
             with col_izq:
                 st.subheader("⚠️ Registro de Omisiones por Gravedad")
                 
-                # FILTRO DIRECTO EN INTERFAZ PARA TU CONTROL
                 selector_crit = st.radio("Filtrar por nivel de riesgo:", ["Mostrar Todos los Errores", "Solo Errores 🚨 CRÍTICO", "Solo Advertencias ⚠️ NO CRÍTICO"], horizontal=True)
                 
                 if selector_crit == "Solo Errores 🚨 CRÍTICO":
@@ -150,17 +148,25 @@ if archivos_cargados:
             
             with col_der:
                 st.subheader("📈 Volumen de Errores por Criticidad")
-                # Gráfico circular dinámico basado únicamente en el volumen de celdas vacías detectadas
                 conteo_crit = df_errores['Criticidad'].value_counts().reset_index()
                 conteo_crit.columns = ['Nivel', 'Cantidad']
                 
+                # REGLA AJUSTADA: Asegurar la proporción del agujero central (hole) e incluir trazo de separación
                 fig = px.pie(
                     conteo_crit, 
                     values="Cantidad", 
                     names="Nivel", 
-                    hole=0.4,
+                    hole=0.5,
                     color="Nivel",
                     color_discrete_map={"🚨 CRÍTICO": "#e74c3c", "⚠️ NO CRÍTICO": "#f1c40f"}
                 )
-                fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=350)
+                fig.update_traces(
+                    textinfo='percent+label',
+                    marker=dict(line=dict(color='#FFFFFF', width=2)) # Añade un borde blanco elegante entre segmentos
+                )
+                fig.update_layout(
+                    margin=dict(l=20, r=20, t=10, b=10), 
+                    height=350,
+                    showlegend=True
+                )
                 st.plotly_chart(fig, use_container_width=True)
