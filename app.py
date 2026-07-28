@@ -188,7 +188,7 @@ def procesar_archivo_ot(file_bytes):
 st.markdown("<h2 style='text-align: center; color: black; font-weight: bold; font-size: 32px;'>GESTION Y CONTROL EN LOS PROCESOS OPERACIONALES</h2>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center; color: black; font-size: 22px;'>Revisión de Ordenes de Trabajo OT</h3>", unsafe_allow_html=True)
 
-col_left, col_right = st.columns()
+col_left, col_right = st.columns([1, 3])
 
 # ================= COLUMNA IZQUIERDA (Cargador) =================
 with col_left:
@@ -214,14 +214,12 @@ with col_right:
         g1, g2 = st.columns(2)
         with g1:
             st.write("**Campos Revisados**")
-            # CORREGIDO DE RAÍZ: Estructura de diccionario válida y completa con datos iniciales reales
             df_empty_bar = pd.DataFrame({'Campo': ['Esperando archivos...'], 'Porcentaje': [0]})
             fig_bar = px.bar(df_empty_bar, x='Porcentaje', y='Campo', orientation='h', color_discrete_sequence=['#CCCCCC'])
             fig_bar.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig_bar, use_container_width=True)
         with g2:
             st.write("**Total OT Revisadas**")
-            # CORREGIDO DE RAÍZ: Estructura de diccionario válida y completa con datos iniciales reales
             df_empty_pie = pd.DataFrame({'Estado': ['Sin datos'], 'Cantidad': [1]})
             fig_pie = px.pie(df_empty_pie, values='Cantidad', names='Estado', hole=0.6, color_discrete_sequence=['#CCCCCC'])
             fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
@@ -272,20 +270,23 @@ with col_right:
         g1, g2 = st.columns(2)
         with g1:
             st.write("**Campos Revisados**")
-            df_conteo = pd.DataFrame([
-                {
-                    'Campo': campo,
-                    'Porcentaje': (v['No cumple'] / total_ot) * 100 if total_ot > 0 else 0
-                }
-                for campo, v in conteo_campos.items()
-            ]).sort_values('Porcentaje', ascending=True)
+            if len(conteo_campos) > 0:
+                df_conteo = pd.DataFrame([
+                    {
+                        'Campo': campo,
+                        'Porcentaje': (v['No cumple'] / total_ot) * 100 if total_ot > 0 else 0
+                    }
+                    for campo, v in conteo_campos.items()
+                ]).sort_values('Porcentaje', ascending=True)
 
-            fig_bar = px.bar(
-                df_conteo, x='Porcentaje', y='Campo', orientation='h',
-                color_discrete_sequence=[COLOR_ROJO]
-            )
-            fig_bar.update_layout(height=550, margin=dict(l=0, r=0, t=10, b=0))
-            st.plotly_chart(fig_bar, use_container_width=True)
+                fig_bar = px.bar(
+                    df_conteo, x='Porcentaje', y='Campo', orientation='h',
+                    color_discrete_sequence=[COLOR_ROJO]
+                )
+                fig_bar.update_layout(height=550, margin=dict(l=0, r=0, t=10, b=0))
+                st.plotly_chart(fig_bar, use_container_width=True)
+            else:
+                st.info("No hay datos de campos para mostrar.")
 
         with g2:
             st.write("**Total OT Revisadas**")
