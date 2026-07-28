@@ -144,7 +144,6 @@ def auditar_archivos_masivos(lista_archivos):
 
             # -------------------------------------------------------------------------
             # 3. REGLA CONDICIONAL AVANZADA (PÁGINA 2)
-            # Detectar palabra "cambio" en E205, E211, E216 -> Requiere B189 obligatorio
             # -------------------------------------------------------------------------
             contiene_cambio = False
             celda_origen_cambio = ""
@@ -179,3 +178,4 @@ def auditar_archivos_masivos(lista_archivos):
                 archivos_con_errores += 1
 
         except Exception as e:
+            reporte_errores.append({
