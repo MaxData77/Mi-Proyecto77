@@ -91,7 +91,7 @@ def auditar_archivos_masivos(lista_archivos):
                 if not campo_completado:
                     errores_en_este_archivo += 1
                     reporte_errores.append({
-                        "Archivo Excel": nombre_archivo,
+                        "Ots Revisadas": nombre_archivo,
                         "Página": num_pagina,
                         "Campo / Alerta": nombre,
                         "Celdas Mapeadas": ", ".join(lista_celdas),
