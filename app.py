@@ -7,7 +7,7 @@ import plotly.express as px
 st.set_page_config(page_title="Auditor Masivo de OTs", layout="wide")
 
 st.title("📋 Auditor Masivo de Órdenes de Trabajo")
-st.markdown("Carga múltiples archivos Excel en lote. La aplicación reportará **únicamente** los campos que hayan quedado vacíos.")
+st.markdown("Carga múltiples archivos Excel en lote. Clasificación automática por nivel de criticidad de celdas vacías.")
 st.write("---")
 
 def auditar_archivos_masivos(lista_archivos):
@@ -20,14 +20,11 @@ def auditar_archivos_masivos(lista_archivos):
             wb = openpyxl.load_workbook(archivo, data_only=True)
             hojas_disponibles = wb.sheetnames
             
-            # --- ASIGNACIÓN FLEXIBLE DE HOJAS ---
-            # Intentamos buscar nombres clave comunes o asignamos por índice físico seguro
             if "OT FORMATO IMPRIMIR" in hojas_disponibles:
                 hoja1 = wb["OT FORMATO IMPRIMIR"]
             else:
-                hoja1 = wb[hojas_disponibles[0]] # Usa la primera pestaña disponible
+                hoja1 = wb[hojas_disponibles[0]]
                 
-            # Para la página 2, si hay más de una hoja usamos la segunda, sino usamos la misma primera
             if len(hojas_disponibles) > 1:
                 hoja2 = wb[hojas_disponibles[1]]
             else:
@@ -37,59 +34,52 @@ def auditar_archivos_masivos(lista_archivos):
             errores_en_este_archivo = 0
 
             # -------------------------------------------------------------------------
-            # CONFIGURACIÓN PÁGINA 1
+            # CONFIGURACIÓN DE CAMPOS Y SU NIVEL DE CRITICIDAD
+            # Estructura: (Página, Nombre, Hoja, [Celdas], Criticidad)
             # -------------------------------------------------------------------------
-            campos_pagina1 = [
-                ("EQUIPO", hoja1, ["G7"]),
-                ("HOROMETRO", hoja1, ["G13"]),
-                ("TURNO", hoja1, ["G19"]),
-                ("ORDEN DE PEDIDO / SALIDA DE BODEGA", hoja1, ["G25"]),
-                ("INICIO (Fecha y Hora)", hoja1, ["X9", "AB9"]),
-                ("FINAL (Fecha y Hora)", hoja1, ["X11", "AB11"]),
-                ("UBICACIÓN (Taller o Terreno)", hoja1, ["R21", "Y21"]),
-                ("MOTIVO DETENCIÓN DEL EQUIPO", hoja1, ["AB25"]),
-                ("TIPO DETENCIÓN: PLANEADO", hoja1, ["AQ13"]),
-                ("TIPO DETENCIÓN: IMPREVISTO", hoja1, ["AQ15"]),
-                ("TIPO DETENCIÓN: ACCIDENTE", hoja1, ["AQ17"]),
-                ("RESPONSABILIDAD: DEALER (FINNING)", hoja1, ["AQ13", "AQ15", "AQ17"]),
-                ("RESPONSABILIDAD: CUSTOMER (CLIENTE)", hoja1, ["AW13", "AW15", "AW17"]),
-                ("EQUIPO ENTREGADO (SI o NO)", hoja1, ["BL10", "BO10"])
+            definicion_campos = [
+                # --- PÁGINA 1 ---
+                ("Página 1", "EQUIPO", hoja1, ["G7"], "🚨 CRÍTICO"),
+                ("Página 1", "HOROMETRO", hoja1, ["G13"], "🚨 CRÍTICO"),
+                ("Página 1", "TURNO", hoja1, ["G19"], "🚨 CRÍTICO"),
+                ("Página 1", "ORDEN DE PEDIDO / SALIDA DE BODEGA", hoja1, ["G25"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "INICIO (Fecha y Hora)", hoja1, ["X9", "AB9"], "🚨 CRÍTICO"),
+                ("Página 1", "FINAL (Fecha y Hora)", hoja1, ["X11", "AB11"], "🚨 CRÍTICO"),
+                ("Página 1", "UBICACIÓN (Taller o Terreno)", hoja1, ["R21", "Y21"], "🚨 CRÍTICO"),
+                ("Página 1", "MOTIVO DETENCIÓN DEL EQUIPO", hoja1, ["AB25"], "🚨 CRÍTICO"),
+                ("Página 1", "TIPO DETENCIÓN: PLANEADO", hoja1, ["AQ13"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "TIPO DETENCIÓN: IMPREVISTO", hoja1, ["AQ15"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "TIPO DETENCIÓN: ACCIDENTE", hoja1, ["AQ17"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "RESPONSABILIDAD: DEALER (FINNING)", hoja1, ["AQ13", "AQ15", "AQ17"], "🚨 CRÍTICO"),
+                ("Página 1", "RESPONSABILIDAD: CUSTOMER (CLIENTE)", hoja1, ["AW13", "AW15", "AW17"], "🚨 CRÍTICO"),
+                ("Página 1", "EQUIPO ENTREGADO (SI o NO)", hoja1, ["BL10", "BO10"], "🚨 CRÍTICO"),
+                
+                # --- PÁGINA 2 ---
+                ("Página 2", "N° PIEZA QUE FALLÓ", hoja2, ["B189"], "⚠️ NO CRÍTICO"),
+                ("Página 2", "DESCRIPCIÓN DE LA PIEZA", hoja2, ["E189"], "⚠️ NO CRÍTICO"),
+                ("Página 2", "CANTIDAD", hoja2, ["X189"], "⚠️ NO CRÍTICO"),
+                ("Página 2", "CÓDIGO SERVICIO", hoja2, ["AA189"], "⚠️ NO CRÍTICO"),
+                ("Página 2", "N° GRUPO", hoja2, ["AE189"], "⚠️ NO CRÍTICO"),
+                ("Página 2", "DESCRIPCIÓN DEL GRUPO", hoja2, ["AJ186", "AJ189"], "⚠️ NO CRÍTICO"),
+                ("Página 2", "¿Llegó al fin de su vida útil?", hoja2, ["AR189"], "⚠️ NO CRÍTICO"),
+                ("Página 2", "COMENTARIOS", hoja2, ["AU189"], "⚠️ NO CRÍTICO"),
+                ("Página 2", "RESUMEN ANÁLISIS DE FALLA", hoja2, ["E205", "E211", "E216"], "🚨 CRÍTICO"),
+                ("Página 2", "VALIDACIÓN DE OT POR JEFE TURNO", hoja2, ["C238", "C244"], "🚨 CRÍTICO"),
+                ("Página 2", "TECNICO RESPONSABLE", hoja2, ["BD239", "BD243"], "🚨 CRÍTICO"),
             ]
 
-            # -------------------------------------------------------------------------
-            # CONFIGURACIÓN PÁGINA 2
-            # -------------------------------------------------------------------------
-            campos_pagina2 = [
-                ("N° PIEZA QUE FALLÓ", hoja2, ["B189"]),
-                ("DESCRIPCIÓN DE LA PIEZA", hoja2, ["E189"]),
-                ("CANTIDAD", hoja2, ["X189"]),
-                ("CÓDIGO SERVICIO", hoja2, ["AA189"]),
-                ("N° GRUPO", hoja2, ["AE189"]),
-                ("DESCRIPCIÓN DEL GRUPO", hoja2, ["AJ186", "AJ189"]),
-                ("¿Llegó al fin de su vida útil?", hoja2, ["AR189"]),
-                ("COMENTARIOS", hoja2, ["AU189"]),
-                ("RESUMEN ANÁLISIS DE FALLA", hoja2, ["E205", "E211", "E216"]),
-                ("VALIDACIÓN DE OT POR JEFE TURNO", hoja2, ["C238", "C244"]),
-                ("TECNICO RESPONSABLE", hoja2, ["BD239", "BD243"]),
-            ]
-
-            todos_los_campos = [("Página 1", n, h, c) for n, h, c in campos_pagina1] + \
-                               [("Página 2", n, h, c) for n, h, c in campos_pagina2]
-
-            for num_pagina, nombre, hoja_obj, lista_celdas in todos_los_campos:
+            for num_pagina, nombre, hoja_obj, lista_celdas, criticidad in definicion_campos:
                 campo_completado = False
                 
                 for celda_id in lista_celdas:
-                    # Validación de seguridad: verificar que la celda exista en la hoja cargada
                     try:
                         valor = hoja_obj[celda_id].value
                         texto_limpio = str(valor).strip().lower() if valor is not None else ""
-                        
                         if valor is not None and texto_limpio not in ["", "no", "none"]:
                             campo_completado = True
                             break
                     except:
-                        pass # Si la celda está fuera de límites, la salta
+                        pass
                 
                 if not campo_completado:
                     errores_en_este_archivo += 1
@@ -97,8 +87,8 @@ def auditar_archivos_masivos(lista_archivos):
                         "Archivo Excel": nombre_archivo,
                         "Página": num_pagina,
                         "Campo Incompleto": nombre,
-                        "Celdas obligatorias": ", ".join(lista_celdas),
-                        "Estado": "❌ Vacío (Faltante)"
+                        "Celdas Mapeadas": ", ".join(lista_celdas),
+                        "Criticidad": criticidad
                     })
             
             if errores_en_este_archivo > 0:
@@ -108,9 +98,9 @@ def auditar_archivos_masivos(lista_archivos):
             reporte_errores.append({
                 "Archivo Excel": archivo.name,
                 "Página": "Error Técnico",
-                "Campo Incompleto": "Error general al procesar estructura",
-                "Celdas obligatorias": "N/A",
-                "Estado": f"⚠️ Error: {str(e)}"
+                "Campo Incompleto": "Error general de formato",
+                "Celdas Mapeadas": "N/A",
+                "Criticidad": "🚨 CRÍTICO"
             })
             archivos_con_errores += 1
 
@@ -124,9 +114,8 @@ archivos_cargados = st.file_uploader(
 )
 
 if archivos_cargados:
-    with st.spinner("Auditando lote de archivos..."):
+    with st.spinner("Auditando criticidad en lote..."):
         df_errores, cant_total, cant_con_errores = auditar_archivos_masivos(archivos_cargados)
-        
         cant_perfectos = cant_total - cant_con_errores
         
         st.subheader("📊 Resumen de la Auditoría Masiva")
@@ -138,29 +127,40 @@ if archivos_cargados:
         st.write("---")
         
         if df_errores.empty:
-            st.success("🎉 ¡Excelente noticias! Todos los archivos cargados están rellenados al 100%. No se encontraron celdas vacías.")
+            st.success("🎉 ¡Excelente! No se encontraron celdas vacías en ninguna jerarquía de criticidad.")
             fig = px.pie(values=[1], names=["100% Correctos"], color_discrete_sequence=["#2ecc71"], hole=0.4)
             st.plotly_chart(fig)
         else:
-            col_izq, col_der = st.columns([1.4, 0.6])
+            col_izq, col_der = st.columns([1.3, 0.7])
             
             with col_izq:
-                st.subheader("⚠️ Registro Centralizado de Campos Vacíos")
-                st.dataframe(df_errores[["Archivo Excel", "Página", "Campo Incompleto", "Celdas obligatorias", "Estado"]], use_container_width=True, height=450)
+                st.subheader("⚠️ Registro de Omisiones por Gravedad")
+                
+                # FILTRO DIRECTO EN INTERFAZ PARA TU CONTROL
+                selector_crit = st.radio("Filtrar por nivel de riesgo:", ["Mostrar Todos los Errores", "Solo Errores 🚨 CRÍTICO", "Solo Advertencias ⚠️ NO CRÍTICO"], horizontal=True)
+                
+                if selector_crit == "Solo Errores 🚨 CRÍTICO":
+                    df_mostrar = df_errores[df_errores['Criticidad'] == "🚨 CRÍTICO"]
+                elif selector_crit == "Solo Advertencias ⚠️ NO CRÍTICO":
+                    df_mostrar = df_errores[df_errores['Criticidad'] == "⚠️ NO CRÍTICO"]
+                else:
+                    df_mostrar = df_errores
+                
+                st.dataframe(df_mostrar[["Archivo Excel", "Página", "Campo Incompleto", "Celdas Mapeadas", "Criticidad"]], use_container_width=True, height=450)
             
             with col_der:
-                st.subheader("📉 Distribución de Archivos")
-                datos_grafico = pd.DataFrame({
-                    "Condición": ["Sin Errores", "Con Campos Vacíos"],
-                    "Cantidad": [cant_perfectos, cant_con_errores]
-                })
+                st.subheader("📈 Volumen de Errores por Criticidad")
+                # Gráfico circular dinámico basado únicamente en el volumen de celdas vacías detectadas
+                conteo_crit = df_errores['Criticidad'].value_counts().reset_index()
+                conteo_crit.columns = ['Nivel', 'Cantidad']
+                
                 fig = px.pie(
-                    datos_grafico, 
+                    conteo_crit, 
                     values="Cantidad", 
-                    names="Condición", 
+                    names="Nivel", 
                     hole=0.4,
-                    color="Condición",
-                    color_discrete_map={"Sin Errores": "#2ecc71", "Con Campos Vacíos": "#e74c3c"}
+                    color="Nivel",
+                    color_discrete_map={"🚨 CRÍTICO": "#e74c3c", "⚠️ NO CRÍTICO": "#f1c40f"}
                 )
                 fig.update_layout(margin=dict(l=10, r=10, t=10, b=10), height=350)
                 st.plotly_chart(fig, use_container_width=True)
