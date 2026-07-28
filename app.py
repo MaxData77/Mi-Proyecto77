@@ -2,14 +2,16 @@ import streamlit as st
 import pandas as pd
 import openpyxl
 import plotly.express as px
+import io
 
-# Configuración de página ancha
-st.set_page_config(page_title="Auditor Masivo de OTs", layout="wide")
+# 1. Configuración de página ancha
+st.set_page_config(page_title="Auditor Masivo de OTs", layout="wide", page_icon="📋")
 
 st.title("📋 Auditor Masivo de Órdenes de Trabajo")
 st.markdown("Carga múltiples archivos Excel en lote. Clasificación automática con motor de alertas y reglas de negocio avanzadas.")
 st.write("---")
 
+# 2. Función de auditoría técnica
 def auditar_archivos_masivos(lista_archivos):
     reporte_errores = []
     total_archivos = len(lista_archivos)
@@ -178,3 +180,100 @@ def auditar_archivos_masivos(lista_archivos):
                 "Criticidad": "🚨 CRÍTICO"
             })
             archivos_con_errores += 1
+
+    return reporte_errores, total_archivos, archivos_con_errores
+
+
+# 3. Interfaz de Usuario (Cargador y Ejecución)
+archivos_subidos = st.file_uploader(
+    "Selecciona las Órdenes de Trabajo en formato Excel (.xlsx)", 
+    type=["xlsx"], 
+    accept_multiple_files=True
+)
+
+if archivos_subidos:
+    if st.button("🚀 Iniciar Auditoría Masiva", type="primary"):
+        with st.spinner("Procesando y auditando archivos..."):
+            errores, total_arch, arch_con_error = auditar_archivos_masivos(archivos_subidos)
+            df_errores = pd.DataFrame(errores)
+
+        st.success("¡Auditoría finalizada con éxito!")
+        st.write("---")
+
+        # 4. Indicadores Clave (KPIs)
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Archivos", total_arch)
+        col2.metric("Con Errores / Alertas", arch_con_error)
+        col3.metric("Archivos Correctos", total_arch - arch_con_error)
+        col4.metric("Total Hallazgos", len(df_errores))
+
+        st.write("---")
+
+        # 5. Visualizaciones de Errores y Hallazgos
+        if not df_errores.empty:
+            col_graph1, col_graph2 = st.columns(2)
+            
+            with col_graph1:
+                st.subheader("Distribución por Criticidad")
+                fig_crit = px.pie(
+                    df_errores, 
+                    names="Criticidad", 
+                    color="Criticidad",
+                    color_discrete_map={"🚨 CRÍTICO": "#FF4B4B", "⚠️ NO CRÍTICO": "#FFAA00"}
+                )
+                st.plotly_chart(fig_crit, use_container_width=True)
+
+            with col_graph2:
+                st.subheader("Top Campos / Alertas más Frecuentes")
+                top_campos = df_errores["Campo / Alerta"].value_counts().reset_index()
+                top_campos.columns = ["Campo / Alerta", "Cantidad"]
+                fig_bar = px.bar(
+                    top_campos.head(7), 
+                    x="Cantidad", 
+                    y="Campo / Alerta", 
+                    orientation="h", 
+                    color="Cantidad",
+                    color_continuous_scale="Reds"
+                )
+                fig_bar.update_layout(yaxis={"autorange": "reversed"})
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+            # 6. Tabla Detallada con Filtros
+            st.subheader("📊 Detalle de Hallazgos")
+            
+            filtro_criticidad = st.multiselect(
+                "Filtrar por Criticidad:", 
+                options=df_errores["Criticidad"].unique(), 
+                default=df_errores["Criticidad"].unique()
+            )
+            
+            df_filtrado = df_errores[df_errores["Criticidad"].isin(filtro_criticidad)]
+            st.dataframe(df_filtrado, use_container_width=True)
+
+            # 7. Descarga del Informe en Excel y CSV
+            st.subheader("📥 Descargar Reporte")
+            
+            # Generador de buffer Excel
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine="openpyxl") as writer:
+                df_errores.to_excel(writer, index=False, sheet_name="Hallazgos")
+            processed_data = output.getvalue()
+
+            col_dl1, col_dl2 = st.columns(2)
+            col_dl1.download_button(
+                label="📄 Descargar Informe en Excel (.xlsx)",
+                data=processed_data,
+                file_name="Reporte_Auditoria_OTs.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            col_dl2.download_button(
+                label="📝 Descargar Informe en CSV (.csv)",
+                data=df_errores.to_csv(index=False).encode("utf-8"),
+                file_name="Reporte_Auditoria_OTs.csv",
+                mime="text/csv"
+            )
+        else:
+            st.balloons()
+            st.success("🎉 ¡Increíble! Todos los archivos procesados cumplen al 100% con los estándares y no registran errores.")
+else:
+    st.info("👋 Por favor, carga uno o más archivos de Órdenes de Trabajo en formato `.xlsx` arriba para empezar.")
