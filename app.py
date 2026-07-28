@@ -188,7 +188,7 @@ def procesar_archivo_ot(file_bytes):
 st.markdown("<h2 style='text-align: center; color: black; font-weight: bold; font-size: 32px;'>GESTION Y CONTROL EN LOS PROCESOS OPERACIONALES</h2>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center; color: black; font-size: 22px;'>Revisión de Ordenes de Trabajo OT</h3>", unsafe_allow_html=True)
 
-col_left, col_right = st.columns([1, 4])
+col_left, col_right = st.columns()
 
 # ================= COLUMNA IZQUIERDA (Cargador) =================
 with col_left:
@@ -214,14 +214,14 @@ with col_right:
         g1, g2 = st.columns(2)
         with g1:
             st.write("**Campos Revisados**")
-            # CORREGIDO: Sintaxis de inicialización del diccionario completada correctamente con datos por defecto
+            # CORREGIDO DE RAÍZ: Estructura de diccionario válida y completa con datos iniciales reales
             df_empty_bar = pd.DataFrame({'Campo': ['Esperando archivos...'], 'Porcentaje': [0]})
             fig_bar = px.bar(df_empty_bar, x='Porcentaje', y='Campo', orientation='h', color_discrete_sequence=['#CCCCCC'])
             fig_bar.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig_bar, use_container_width=True)
         with g2:
             st.write("**Total OT Revisadas**")
-            # CORREGIDO: Sintaxis de inicialización del diccionario completada correctamente con datos por defecto
+            # CORREGIDO DE RAÍZ: Estructura de diccionario válida y completa con datos iniciales reales
             df_empty_pie = pd.DataFrame({'Estado': ['Sin datos'], 'Cantidad': [1]})
             fig_pie = px.pie(df_empty_pie, values='Cantidad', names='Estado', hole=0.6, color_discrete_sequence=['#CCCCCC'])
             fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
