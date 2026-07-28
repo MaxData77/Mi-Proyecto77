@@ -51,7 +51,7 @@ def auditar_archivos_masivos(lista_archivos):
                 
                 # --- RESPONSABILIDAD MATRIZ UNIFICADA ---
                 # Revisa las 6 celdas juntas (Dealer: AQ13, AQ15, AQ17 | Customer: AW13, AW15, AW17)
-                ("Página 1", "TIPO DETENCIÓN / RESPONSABILIDAD", hoja1, ["AQ13", "AQ15", "AQ17", "AW13", "AW15", "AW17"], "🚨 CRÍTICO"),
+                ("Página 1", "TIPO DETENCIÓN / RESPONSABILIDAD", hoja1, ["AQ13", "AQ15", "AQ17", "AW13", "AW15", "AW17"], "⚠️ NO CRÍTICO"),
 
                 # --- FIRMAS PÁGINA 2 ---
                 ("Página 2", "FIRMA JEFE TURNO (NOMBRE + RUT)", hoja2, ["C238", "C244"], "🚨 CRÍTICO"),
@@ -60,13 +60,13 @@ def auditar_archivos_masivos(lista_archivos):
                 # --- OTROS CAMPOS DE APOYO Y SECUNDARIOS ---
                 ("Página 1", "EQUIPO", hoja1, ["G7"], "🚨 CRÍTICO"),
                 ("Página 1", "ORDEN DE PEDIDO / SALIDA DE BODEGA", hoja1, ["G25"], "⚠️ NO CRÍTICO"),
-                ("Página 1", "INICIO (Fecha y Hora)", hoja1, ["X9", "AB9"], "🚨 CRÍTICO"),
-                ("Página 1", "FINAL (Fecha y Hora)", hoja1, ["X11", "AB11"], "🚨 CRÍTICO"),
-                ("Página 1", "UBICACIÓN (Taller o Terreno)", hoja1, ["R21", "Y21"], "🚨 CRÍTICO"),
-                ("Página 1", "EQUIPO ENTREGADO (SI o NO)", hoja1, ["BL10", "BO10"], "🚨 CRÍTICO"),
-                ("Página 1", "HORA INICIO ACTIVIDAD", hoja1, ["B42"], "🚨 CRÍTICO"),
-                ("Página 1", "HORA TERMINO ACTIVIDAD", hoja1, ["F42"], "🚨 CRÍTICO"),
-                ("Página 1", "Nº ORDEN SERVICIO", hoja1, ["J42"], "🚨 CRÍTICO"),
+                ("Página 1", "INICIO (Fecha y Hora)", hoja1, ["X9", "AB9"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "FINAL (Fecha y Hora)", hoja1, ["X11", "AB11"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "UBICACIÓN (Taller o Terreno)", hoja1, ["R21", "Y21"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "EQUIPO ENTREGADO (SI o NO)", hoja1, ["BL10", "BO10"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "HORA INICIO ACTIVIDAD", hoja1, ["B42"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "HORA TERMINO ACTIVIDAD", hoja1, ["F42"], "⚠️ NO CRÍTICO"),
+                ("Página 1", "Nº ORDEN SERVICIO", hoja1, ["J42"], "⚠️ NO CRÍTICO"),
 
                 # --- PÁGINA 2 CAMPOS OPCIONALES ---
                 ("Página 2", "DESCRIPCIÓN DE LA PIEZA", hoja2, ["E189"], "⚠️ NO CRÍTICO"),
