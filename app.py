@@ -11,25 +11,6 @@ st.title("📋 Auditor Masivo de Órdenes de Trabajo")
 st.markdown("Carga múltiples archivos Excel en lote. Clasificación automática con motor de alertas y reglas de negocio avanzadas.")
 st.write("---")
 
-# Lista de tus 15 ítems prioritarios
-ITEMS_PRIORITARIOS = [
-    "HORÓMETRO",
-    "MOTIVO DETENCIÓN DEL EQUIPO",
-    "CÓDIGO COMPONENTE SMCS",
-    "CÓDIGO MODIFICADOR",
-    "CÓDIGO TRABAJO",
-    "DESCRIPCIÓN DE SÍNTOMA",
-    "CÓDIGO SÍNTOMA",
-    "DESCRIPCIÓN DE LA CAUSA",
-    "CÓDIGO CAUSA",
-    "TIPO TAREA",
-    "TAREA PRINCIPAL",
-    "DESCRIPCIÓN DE ACTIVIDADES",
-    "REGISTRO INFORME SIMS",
-    "FIRMA JEFE TURNO (NOMBRE + RUT)",
-    "FIRMA TÉCNICO RESPONSABLE (NOMBRE + RUT)"
-]
-
 # 2. Función de auditoría técnica
 def auditar_archivos_masivos(lista_archivos):
     reporte_errores = []
@@ -68,6 +49,10 @@ def auditar_archivos_masivos(lista_archivos):
                 ("Página 1", "TAREA PRINCIPAL", hoja1, ["BV42"], "🚨 CRÍTICO"),
                 ("Página 1", "DESCRIPCIÓN DE ACTIVIDADES", hoja1, ["Z42"], "🚨 CRÍTICO"),
                 
+                # --- RESPONSABILIDAD MATRIZ UNIFICADA ---
+                # Revisa las 6 celdas juntas (Dealer: AQ13, AQ15, AQ17 | Customer: AW13, AW15, AW17)
+                ("Página 1", "TIPO DETENCIÓN / RESPONSABILIDAD", hoja1, ["AQ13", "AQ15", "AQ17", "AW13", "AW15", "AW17"], "🚨 CRÍTICO"),
+
                 # --- FIRMAS PÁGINA 2 ---
                 ("Página 2", "FIRMA JEFE TURNO (NOMBRE + RUT)", hoja2, ["C238", "C244"], "🚨 CRÍTICO"),
                 ("Página 2", "FIRMA TÉCNICO RESPONSABLE (NOMBRE + RUT)", hoja2, ["BD239", "BD243"], "🚨 CRÍTICO"),
@@ -78,8 +63,6 @@ def auditar_archivos_masivos(lista_archivos):
                 ("Página 1", "INICIO (Fecha y Hora)", hoja1, ["X9", "AB9"], "🚨 CRÍTICO"),
                 ("Página 1", "FINAL (Fecha y Hora)", hoja1, ["X11", "AB11"], "🚨 CRÍTICO"),
                 ("Página 1", "UBICACIÓN (Taller o Terreno)", hoja1, ["R21", "Y21"], "🚨 CRÍTICO"),
-                ("Página 1", "RESPONSABILIDAD: DEALER (FINNING)", hoja1, ["AQ13", "AQ15", "AQ17"], "🚨 CRÍTICO"),
-                ("Página 1", "RESPONSABILIDAD: CUSTOMER (CLIENTE)", hoja1, ["AW13", "AW15", "AW17"], "🚨 CRÍTICO"),
                 ("Página 1", "EQUIPO ENTREGADO (SI o NO)", hoja1, ["BL10", "BO10"], "🚨 CRÍTICO"),
                 ("Página 1", "HORA INICIO ACTIVIDAD", hoja1, ["B42"], "🚨 CRÍTICO"),
                 ("Página 1", "HORA TERMINO ACTIVIDAD", hoja1, ["F42"], "🚨 CRÍTICO"),
@@ -155,7 +138,6 @@ def auditar_archivos_masivos(lista_archivos):
 
             # -------------------------------------------------------------------------
             # 3. REGLA CONDICIONAL "REGISTRO INFORME SIMS"
-            # Evalúa palabra "cambio" en E205, E211, E216 y exige B189 llena
             # -------------------------------------------------------------------------
             contiene_cambio = False
             celda_origen_cambio = ""
@@ -170,7 +152,6 @@ def auditar_archivos_masivos(lista_archivos):
             txt_b189 = str(val_b189).strip().lower() if val_b189 is not None else ""
             es_b189_vacia = (val_b189 is None or txt_b189 in ["", "no", "none", "ㅤ"])
 
-            # SOLO se gatilla error en SIMS si hay palabra "cambio" Y la celda B189 está vacía
             if contiene_cambio and es_b189_vacia:
                 errores_en_este_archivo += 1
                 reporte_errores.append({
