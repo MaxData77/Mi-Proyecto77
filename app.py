@@ -1,337 +1,244 @@
 import streamlit as st
 import pandas as pd
-import openpyxl
+import numpy as np
 import plotly.express as px
+import openpyxl
 import io
 
-# 1. Configuración de página ancha
-st.set_page_config(page_title="Auditor Masivo de OTs", layout="wide", page_icon="📋")
-
-st.title("📋 Auditor Masivo de Órdenes de Trabajo")
-st.markdown("Auditoría enfocada **exclusivamente en los 15 ítems prioritarios y críticos** con métricas de cumplimiento porcentual.")
-st.write("---")
-
-# Lista exacta de los 15 ítems prioritarios
-ITEMS_CRITICOS_NOMBRES = [
-    "HORÓMETRO",
-    "MOTIVO DETENCIÓN DEL EQUIPO",
-    "CÓDIGO COMPONENTE SMCS",
-    "CÓDIGO MODIFICADOR",
-    "CÓDIGO TRABAJO",
-    "DESCRIPCIÓN DE SÍNTOMA",
-    "CÓDIGO SÍNTOMA",
-    "DESCRIPCIÓN DE LA CAUSA",
-    "CÓDIGO CAUSA",
-    "TIPO TAREA",
-    "TAREA PRINCIPAL",
-    "DESCRIPCIÓN DE ACTIVIDADES",
-    "REGISTRO INFORME SIMS",
-    "FIRMA JEFE TURNO (NOMBRE + RUT)",
-    "FIRMA TÉCNICO RESPONSABLE (NOMBRE + RUT)"
-]
-
-# 2. Función de auditoría técnica
-def auditar_archivos_masivos(lista_archivos):
-    reporte_errores = []
-    detalle_ots = []
-    
-    total_archivos = len(lista_archivos)
-    archivos_con_errores = 0
-    
-    # Contadores de cumplimiento por cada uno de los 15 ítems críticos
-    conteo_exito_item = {item: 0 for item in ITEMS_CRITICOS_NOMBRES}
-
-    for archivo in lista_archivos:
-        try:
-            wb = openpyxl.load_workbook(archivo, data_only=True)
-            hojas_disponibles = wb.sheetnames
-            
-            if "OT FORMATO IMPRIMIR" in hojas_disponibles:
-                hoja1 = wb["OT FORMATO IMPRIMIR"]
-            else:
-                hoja1 = wb[hojas_disponibles[0]]
-                
-            if len(hojas_disponibles) > 1:
-                hoja2 = wb[hojas_disponibles[1]]
-            else:
-                hoja2 = hoja1
-            
-            nombre_archivo = archivo.name
-            errores_en_este_archivo = 0
-
-            # --- Detección de datos SIMS (Pieza en B189 y Descripción en E189) ---
-            val_b189 = hoja2["B189"].value
-            val_e189 = hoja2["E189"].value
-            txt_b189 = str(val_b189).strip() if val_b189 is not None else ""
-            txt_e189 = str(val_e189).strip() if val_e189 is not None else ""
-            
-            tiene_sims_valido = bool(txt_b189 and txt_b189.lower() not in ["none", "no", "", "ㅤ"])
-
-            # -------------------------------------------------------------------------
-            # 1. EVALUACIÓN DE CELDAS VACÍAS
-            # -------------------------------------------------------------------------
-            definicion_campos_criticos = [
-                ("Página 1", "HORÓMETRO", hoja1, ["G13"]),
-                ("Página 1", "MOTIVO DETENCIÓN DEL EQUIPO", hoja1, ["AB25"]),
-                ("Página 1", "CÓDIGO COMPONENTE SMCS", hoja1, ["Q42"]),
-                ("Página 1", "CÓDIGO MODIFICADOR", hoja1, ["T42"]),
-                ("Página 1", "CÓDIGO TRABAJO", hoja1, ["W42"]),
-                ("Página 1", "DESCRIPCIÓN DE SÍNTOMA", hoja1, ["Z42"]),
-                ("Página 1", "CÓDIGO SÍNTOMA", hoja1, ["AO42"]),
-                ("Página 1", "DESCRIPCIÓN DE LA CAUSA", hoja1, ["AR42"]),
-                ("Página 1", "CÓDIGO CAUSA", hoja1, ["BH42"]),
-                ("Página 1", "TIPO TAREA", hoja1, ["BO42"]),
-                ("Página 1", "TAREA PRINCIPAL", hoja1, ["BV42"]),
-                ("Página 1", "DESCRIPCIÓN DE ACTIVIDADES", hoja1, ["Z42"]),
-                ("Página 2", "FIRMA JEFE TURNO (NOMBRE + RUT)", hoja2, ["C238", "C244"]),
-                ("Página 2", "FIRMA TÉCNICO RESPONSABLE (NOMBRE + RUT)", hoja2, ["BD239", "BD243"])
-            ]
-
-            # Evaluar los 14 ítems directos
-            for num_pagina, nombre_item, hoja_obj, lista_celdas in definicion_campos_criticos:
-                campo_completado = False
-                for celda_id in lista_celdas:
-                    valor = hoja_obj[celda_id].value
-                    texto_limpio = str(valor).strip().lower() if valor is not None else ""
-                    if valor is not None and texto_limpio not in ["", "no", "none", "ㅤ"]:
-                        campo_completado = True
-                        break
-                
-                if campo_completado:
-                    conteo_exito_item[nombre_item] += 1
-                else:
-                    errores_en_este_archivo += 1
-                    reporte_errores.append({
-                        "Archivo Excel": nombre_archivo,
-                        "Página": num_pagina,
-                        "Campo / Alerta": nombre_item,
-                        "Celdas Mapeadas": ", ".join(lista_celdas),
-                        "Detalle del Error": f"El campo obligatorio '{nombre_item}' está vacío",
-                        "Criticidad": "🚨 CRÍTICO"
-                    })
-
-            # -------------------------------------------------------------------------
-            # 2. MOTOR DE ALERTAS DE CONTENIDO INVÁLIDO
-            # -------------------------------------------------------------------------
-            val_z42 = hoja1["Z42"].value
-            val_ao42 = hoja1["AO42"].value
-            val_ar42 = hoja1["AR42"].value
-            val_bh42 = hoja1["BH42"].value
-
-            alertas_especificas = [
-                ("Página 1", "DESCRIPCIÓN DE SÍNTOMA", "Z42", val_z42, "SIN INFORMACION", "Contiene texto no permitido 'SIN INFORMACION'", "igual_texto"),
-                ("Página 1", "CÓDIGO SÍNTOMA", "AO42", val_ao42, "156", "Alerta: Código restringido '156'", "igual_texto"),
-                ("Página 1", "DESCRIPCIÓN DE LA CAUSA", "AR42", val_ar42, "OTROS", "Texto no permitido 'OTROS'", "igual_texto"),
-                ("Página 1", "CÓDIGO CAUSA", "BH42", val_bh42, ["6.6", "6,6", "7.1", "7,1"], "Código de falla crítico detectado", "en_lista")
-            ]
-
-            for num_pag, nom_alerta, celda_id, val_real, val_prohibido, msg_error, tipo_verif in alertas_especificas:
-                if val_real is not None:
-                    txt_real_clean = str(val_real).strip().upper()
-                    disparar_alerta = False
-                    
-                    if tipo_verif == "igual_texto" and txt_real_clean == str(val_prohibido).upper():
-                        disparar_alerta = True
-                    elif tipo_verif == "en_lista" and str(val_real).strip() in val_prohibido:
-                        disparar_alerta = True
-                        msg_error = f"Contiene código de falla crítico ({str(val_real).strip()})"
-                        
-                    if disparar_alerta:
-                        errores_en_este_archivo += 1
-                        reporte_errores.append({
-                            "Archivo Excel": nombre_archivo,
-                            "Página": num_pag,
-                            "Campo / Alerta": nom_alerta,
-                            "Celdas Mapeadas": celda_id,
-                            "Detalle del Error": msg_error,
-                            "Criticidad": "🚨 CRÍTICO"
-                        })
-
-            # -------------------------------------------------------------------------
-            # 3. EVALUACIÓN Y REGLA CONDICIONAL "REGISTRO INFORME SIMS"
-            # -------------------------------------------------------------------------
-            requiere_sims = False
-            celda_origen_cambio = ""
-            for c_id in ["E205", "E211", "E216"]:
-                val_c = hoja2[c_id].value
-                if val_c:
-                    txt_c = str(val_c).lower()
-                    if "cambi" in txt_c or "reemplaz" in txt_c:
-                        requiere_sims = True
-                        celda_origen_cambio = c_id
-                        break
-
-            # Evaluación de cumplimiento del ítem SIMS
-            if requiere_sims:
-                if tiene_sims_valido:
-                    conteo_exito_item["REGISTRO INFORME SIMS"] += 1
-                else:
-                    errores_en_este_archivo += 1
-                    reporte_errores.append({
-                        "Archivo Excel": nombre_archivo,
-                        "Página": "Página 2",
-                        "Campo / Alerta": "REGISTRO INFORME SIMS",
-                        "Celdas Mapeadas": f"{celda_origen_cambio} / B189",
-                        "Detalle del Error": f"Se detectó acción de cambio en {celda_origen_cambio}, pero el N° Pieza (B189) en Informe SIMS está vacío.",
-                        "Criticidad": "🚨 CRÍTICO"
-                    })
-            else:
-                # Si no requería SIMS (no hubo cambio), cuenta como no defectuoso
-                conteo_exito_item["REGISTRO INFORME SIMS"] += 1
-
-            if errores_en_este_archivo > 0:
-                archivos_con_errores += 1
-
-            # Guardar resumen de la OT procesada
-            detalle_ots.append({
-                "Archivo Excel": nombre_archivo,
-                "Estado OT": "🚨 Con Errores" if errores_en_este_archivo > 0 else "✅ Sin Errores",
-                "Requiere SIMS": "Sí" if requiere_sims else "No",
-                "Tiene Dato SIMS (B189)": "Sí" if tiene_sims_valido else "No",
-                "N° Pieza (B189)": txt_b189 if tiene_sims_valido else "N/A",
-                "Descripción Pieza (E189)": txt_e189 if tiene_sims_valido else "N/A"
-            })
-
-        except Exception as e:
-            reporte_errores.append({
-                "Archivo Excel": archivo.name,
-                "Página": "Error Técnico",
-                "Campo / Alerta": "Error de estructura",
-                "Celdas Mapeadas": "N/A",
-                "Detalle del Error": f"No se pudo procesar: {str(e)}",
-                "Criticidad": "🚨 CRÍTICO"
-            })
-            archivos_con_errores += 1
-
-    return reporte_errores, detalle_ots, total_archivos, archivos_con_errores, conteo_exito_item
-
-
-# 3. Interfaz de Usuario
-archivos_subidos = st.file_uploader(
-    "Selecciona las Órdenes de Trabajo en formato Excel (.xlsx)", 
-    type=["xlsx"], 
-    accept_multiple_files=True
+# 1. Configuración de página en modo ancho (Wide)
+st.set_page_config(
+    page_title="Gestión y Control de Ordenes OT",
+    layout="wide"
 )
 
-if archivos_subidos:
-    if st.button("🚀 Iniciar Auditoría Masiva", type="primary"):
-        with st.spinner("Procesando y auditando únicamente campos críticos..."):
-            errores, detalle_ots, total_arch, arch_con_error, conteo_exito = auditar_archivos_masivos(archivos_subidos)
-            df_errores = pd.DataFrame(errores)
-            df_ots = pd.DataFrame(detalle_ots)
+COLOR_VERDE = "#00FF00"
+COLOR_ROJO = "#FF0000"
 
-        st.success("¡Auditoría finalizada con éxito!")
-        st.write("---")
+# 2. Inyección de CSS para rediseñar la interfaz
+st.markdown("""
+    <style>
+    .stApp {
+        background-color: #FFC000 !important;
+    }
+    .metric-card {
+        background-color: #000000;
+        color: white;
+        padding: 10px 15px;
+        border-radius: 12px;
+        text-align: center;
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.3);
+    }
+    .metric-card h3 {
+        color: #FFFFFF !important;
+        font-size: 19px !important;
+        font-weight: 600 !important;
+        margin-bottom: 0px !important;
+    }
+    .metric-card h1 {
+        color: #FFFFFF !important;
+        font-size: 40px !important;
+        font-weight: bold !important;
+        margin: 0 !important;
+        line-height: 1.1;
+    }
+    .upload-container {
+        background-color: #000000;
+        padding: 15px;
+        border-radius: 15px;
+        text-align: center;
+        color: white;
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.3);
+    }
+    div[data-testid="stFileUploader"] {
+        background-color: #1A1A1A !important;
+        border-radius: 10px;
+        padding: 10px;
+        border: 1px dashed #FFC000 !important;
+    }
+    div[data-testid="stFileUploader"] label {
+        color: #FFC000 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-        # 4. Indicadores Clave (KPIs)
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total Archivos", total_arch)
-        col2.metric("Con Errores Críticos", arch_con_error)
-        col3.metric("Archivos Correctos", total_arch - arch_con_error)
-        col4.metric("Total Alertas Críticas", len(df_errores))
-
-        st.write("---")
-
-        # 5. Gráfico de Cumplimiento Porcentual (%) del Top 15 Ítems
-        st.subheader("📊 Cumplimiento de los 15 Ítems Críticos (%)")
+# 3. Función de Procesamiento con Todas las Reglas de Negocio Oficiales
+def procesar_archivo_ot(file_bytes):
+    resultado = {
+        "equipo": "Sin equipo",
+        "orden": "OT Sin Orden",
+        "turno": "N/A",
+        "faltantes": 0,
+        "detalle": "Ninguno",
+        "estado": "Cumple",
+        "campos_validados": {}
+    }
+    try:
+        file_stream = io.BytesIO(file_bytes.read())
+        wb = openpyxl.load_workbook(file_stream, data_only=True)
+        sheet = wb.active
         
-        data_cumplimiento = []
-        for item in ITEMS_CRITICOS_NOMBRES:
-            porcentaje = (conteo_exito[item] / total_arch) * 100 if total_arch > 0 else 0
-            data_cumplimiento.append({
-                "Campo / Ítem Crítico": item,
-                "Cumplimiento (%)": round(porcentaje, 1),
-                "Estado": "100%" if porcentaje == 100 else f"{round(porcentaje, 1)}%"
-            })
+        # --- EXTRACCIÓN DE DATOS DE CABECERA ---
+        val_equipo = sheet['G7'].value
+        val_orden = sheet['J42'].value or sheet['G25'].value
+        val_turno = sheet['G19'].value
         
-        df_cumplimiento = pd.DataFrame(data_cumplimiento)
-        
-        # Color dinámico: Verde si es 100%, Rojo/Tomate si es menor a 100%
-        fig_cumplimiento = px.bar(
-            df_cumplimiento,
-            x="Cumplimiento (%)",
-            y="Campo / Ítem Crítico",
-            orientation="h",
-            text="Estado",
-            color="Cumplimiento (%)",
-            color_continuous_scale=[(0, "#FF4B4B"), (0.99, "#FF4B4B"), (1, "#28A745")],
-            range_x=[0, 105]
-        )
-        
-        fig_cumplimiento.update_traces(textposition="outside")
-        fig_cumplimiento.update_layout(
-            yaxis={"autorange": "reversed"}, 
-            height=550,
-            showlegend=False,
-            coloraxis_showscale=False
-        )
-        st.plotly_chart(fig_cumplimiento, use_container_width=True)
+        if val_equipo and str(val_equipo).strip(): resultado["equipo"] = str(val_equipo).strip()
+        if val_orden and str(val_orden).strip(): resultado["orden"] = str(val_orden).strip()
+        if val_turno and str(val_turno).strip(): resultado["turno"] = str(val_turno).strip()
 
-        st.write("---")
-
-        # 6. Pestañas para Análisis Detallado y Filtro SIMS
-        tab1, tab2 = st.columns(2)
-
-        # SECCIÓN DE ALERTAS Y ERRORES
-        st.subheader("🚨 Detalle de Errores Críticos Detectados")
-        if not df_errores.empty:
-            st.dataframe(df_errores, use_container_width=True)
-        else:
-            st.success("🎉 No se detectaron errores críticos en los archivos procesados.")
-
-        st.write("---")
-
-        # SECCIÓN Y FILTRO DE OTs / SIMS
-        st.subheader("🔎 Localizador de OTs y Registro SIMS")
-        st.markdown("Usa los filtros a continuación para **ubicar la OT que sí cuenta con datos en el Informe SIMS** o revisar el estado por archivo:")
-        
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            filtro_sims = st.selectbox(
-                "Filtrar por presencia de datos SIMS (B189):", 
-                ["Todos", "Solo con datos SIMS (B189 completa)", "Sin datos SIMS (B189 vacía)"]
-            )
-        with col_f2:
-            filtro_estado = st.selectbox(
-                "Filtrar por Estado de OT:", 
-                ["Todos", "✅ Sin Errores", "🚨 Con Errores"]
-            )
-
-        df_ots_filtrado = df_ots.copy()
-        
-        if filtro_sims == "Solo con datos SIMS (B189 completa)":
-            df_ots_filtrado = df_ots_filtrado[df_ots_filtrado["Tiene Dato SIMS (B189)"] == "Sí"]
-        elif filtro_sims == "Sin datos SIMS (B189 vacía)":
-            df_ots_filtrado = df_ots_filtrado[df_ots_filtrado["Tiene Dato SIMS (B189)"] == "No"]
+        # --- DICCIONARIO GENERAL DE CELDAS A EVALUAR ---
+        campos_criticos = {
+            # PÁGINA 1: Antecedentes y Trabajo
+            'HORÓMETRO': sheet['G13'].value,
+            'ORDEN DE PEDIDO': sheet['G25'].value,
+            'MOTIVO DETENCIÓN': sheet['AB25'].value,
+            'FECHA INICIO': sheet['X9'].value,
+            'HORA INICIO': sheet['AB9'].value,
+            'FECHA FINAL': sheet['X11'].value,
+            'HORA FINAL': sheet['AB11'].value,
+            'HORA TRABAJO INICIO': sheet['B42'].value,
+            'HORA TRABAJO TERMINO': sheet['F42'].value,
+            'CÓDIGO SMCS': sheet['Q42'].value,
+            'CÓDIGO MODIFICADOR': sheet['T42'].value,
+            'CÓDIGO TRABAJO': sheet['W42'].value,
+            'DESCRIPCIÓN SÍNTOMA': sheet['Z42'].value,
+            'CÓDIGO SÍNTOMA': sheet['AO42'].value,
+            'DESCRIPCION CAUSA': sheet['AR42'].value,
+            'CÓDIGO CAUSA': sheet['BH42'].value,
+            'TIPO TAREA': sheet['BO42'].value,
+            'TAREA PRINCIPAL': sheet['BV42'].value,
             
-        if filtro_estado != "Todos":
-            df_ots_filtrado = df_ots_filtrado[df_ots_filtrado["Estado OT"] == filtro_estado]
-
-        st.dataframe(df_ots_filtrado, use_container_width=True)
-
-        # 7. Descarga del Informe
-        st.subheader("📥 Descargar Reporte Completo")
+            # PÁGINA 2: Informe SIMS
+            'N° PIEZA QUE FALLÓ': sheet['B189'].value,
+            'DESCRIPCIÓN DE LA PIEZA': sheet['E189'].value,
+            'CANTIDAD': sheet['X189'].value,
+            'CÓDIGO SERVICIO': sheet['AA189'].value,
+            'N° GRUPO': sheet['AE189'].value,
+            'DESCRIPCIÓN DEL GRUPO': sheet['AJ186'].value, # Celda AJ186 según el mapeo
+            'FIN VIDA ÚTIL?': sheet['AR189'].value,
+            'COMENTARIOS SIMS': sheet['AU189'].value,
+            
+            # PÁGINA 2: Firmas Responsables
+            'JEFE TURNO (NOMBRE)': sheet['C238'].value,
+            'JEFE TURNO (RUT)': sheet['C244'].value,
+            'TECNICO (NOMBRE)': sheet['BD239'].value,
+            'TECNICO (RUT)': sheet['BD243'].value,
+        }
         
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df_cumplimiento.to_excel(writer, index=False, sheet_name="Resumen_Cumplimiento")
-            if not df_errores.empty:
-                df_errores.to_excel(writer, index=False, sheet_name="Errores_Criticos")
-            df_ots.to_excel(writer, index=False, sheet_name="Detalle_OTs_SIMS")
-        processed_data = output.getvalue()
+        campos_con_hallazgo = []
 
-        col_dl1, col_dl2 = st.columns(2)
-        col_dl1.download_button(
-            label="📄 Descargar Reporte en Excel (.xlsx)",
-            data=processed_data,
-            file_name="Reporte_Auditoria_OTs_SIMS.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        col_dl2.download_button(
-            label="📝 Descargar Resumen de Errores en CSV (.csv)",
-            data=df_errores.to_csv(index=False).encode("utf-8") if not df_errores.empty else b"",
-            file_name="Reporte_Errores_Criticos.csv",
-            mime="text/csv"
-        )
-else:
-    st.info("👋 Por favor, carga uno o más archivos de Órdenes de Trabajo en formato `.xlsx` arriba para empezar.")
+        # --- VALIDACIÓN DINÁMICA DE REGLAS DE NEGOCIO ---
+        for campo, valor in campos_criticos.items():
+            val_str = str(valor).strip().upper() if valor is not None else ""
+            hubo_alerta = False
+            
+            # Alerta base: Celda vacía
+            if val_str == "":
+                hubo_alerta = True
+            # Alertas específicas Página 1
+            elif campo == 'DESCRIPCIÓN SÍNTOMA' and val_str == "SIN INFORMACION":
+                hubo_alerta = True
+            elif campo == 'CÓDIGO SÍNTOMA' and val_str == "156":
+                hubo_alerta = True
+            elif campo == 'DESCRIPCION CAUSA' and val_str == "OTROS":
+                hubo_alerta = True
+            elif campo == 'CÓDIGO CAUSA' and val_str in ["6.6", "6,6", "7.1", "7,1"]:
+                hubo_alerta = True
+
+            if hubo_alerta:
+                campos_con_hallazgo.append(campo)
+                resultado["campos_validados"][campo] = "No cumple"
+            else:
+                resultado["campos_validados"][campo] = "Cumple"
+
+        # --- REGRELA AVANZADA: RESUMEN ANÁLISIS DE FALLA (E205, E211, E216) ---
+        analisis_texto = " ".join([
+            str(sheet['E205'].value or ""), 
+            str(sheet['E211'].value or ""), 
+            str(sheet['E216'].value or "")
+        ]).strip().upper()
+        
+        resultado["campos_validados"]['RESUMEN ANÁLISIS DE FALLA'] = "Cumple"
+        if analisis_texto == "":
+            campos_con_hallazgo.append('RESUMEN ANÁLISIS DE FALLA')
+            resultado["campos_validados"]['RESUMEN ANÁLISIS DE FALLA'] = "No cumple"
+        elif "CAMBIO" in analisis_texto:
+            # Validación cruzada obligatoria con B189
+            val_b189 = sheet['B189'].value
+            if val_b189 is None or str(val_b189).strip() == "":
+                if 'N° PIEZA QUE FALLÓ' not in campos_con_hallazgo:
+                    campos_con_hallazgo.append('N° PIEZA QUE FALLÓ (Requerido por Cambio)')
+                resultado["campos_validados"]['N° PIEZA QUE FALLÓ'] = "No cumple"
+
+        # --- CONSOLIDACIÓN DEL ESTADO FINAL ---
+        cant_faltantes = len(campos_con_hallazgo)
+        if cant_faltantes > 0:
+            resultado["faltantes"] = cant_faltantes
+            resultado["detalle"] = ", ".join(campos_con_hallazgo)
+            resultado["estado"] = "No cumple"
+        else:
+            resultado["detalle"] = "Completo"
+            resultado["estado"] = "Cumple"
+            
+        return resultado
+    except Exception as e:
+        resultado["estado"] = "No cumple"
+        resultado["detalle"] = f"Error: {str(e)}"
+        return resultado
+
+# --- ENCABEZADO DE INTERFAZ ---
+st.markdown("<h2 style='text-align: center; color: black; font-weight: bold; font-size: 32px;'>GESTION Y CONTROL EN LOS PROCESOS OPERACIONALES</h2>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; color: black; font-size: 22px;'>Revisión de Ordenes de Trabajo OT</h3>", unsafe_allow_html=True)
+
+col_left, col_right = st.columns([1, 4])
+
+# ================= COLUMNA IZQUIERDA (Cargador) =================
+with col_left:
+    st.markdown("""
+        <div class="upload-container">
+            <p style="color: #FFC000; font-weight: bold; font-size: 14px; margin-bottom: 8px;">
+                Carga los archivos a revisar<br>(Excel .XLSX)
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    uploaded_files = st.file_uploader("", accept_multiple_files=True, type=['xlsx'])
+    ejecutar = st.button("Ejecutar revisión", use_container_width=True)
+
+# ================= COLUMNA DERECHA (Dashboard Analítico) =================
+with col_right:
+    if not ejecutar or not uploaded_files:
+        # Estado Inicial vacío (Dashboard en 0)
+        m1, m2, m3, m4 = st.columns(4)
+        for m, txt in zip([m1, m2, m3, m4], ["OT Revisadas", "OT con observación", "Hallazgos detectados", "OT completa"]):
+            with m: st.markdown(f'<div class="metric-card"><h3>{txt}</h3><h1>0</h1></div>', unsafe_allow_html=True)
+
+        g1, g2 = st.columns([2, 1])
+        with g1:
+            st.write("**Campos Revisados**")
+            df_empty_bar = pd.DataFrame({'Campo': ['Esperando archivos...'], 'Porcentaje': [0]})
+            fig_bar = px.bar(df_empty_bar, x='Porcentaje', y='Campo', orientation='h', color_discrete_sequence=['#CCCCCC'])
+            fig_bar.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0), xaxis=dict(range=[0, 100]))
+            st.plotly_chart(fig_bar, use_container_width=True)
+        with g2:
+            st.write("**Total OT Revisadas**")
+            df_empty_pie = pd.DataFrame({'Estado': ['Sin datos'], 'Cantidad': [1]})
+            fig_pie = px.pie(df_empty_pie, values='Cantidad', names='Estado', hole=0.6, color_discrete_sequence=['#CCCCCC'])
+            fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        st.write("**Resumen por OT**")
+        df_empty_table = pd.DataFrame(columns=['Archivo', 'Equipo', 'Orden', 'Turno', 'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado'])
+        st.dataframe(df_empty_table, use_container_width=True)
+
+    else:
+        # --- PROCESAMIENTO ACTIVO ---
+        lista_resumen = []
+        conteo_campos = {} # Para calcular porcentajes globales del gráfico de barras
+
+        for f in uploaded_files:
+            datos_ot = procesar_archivo_ot(f)
+            lista_resumen.append({
+                'Archivo': f.name,
+                'Equipo': datos_ot['equipo'],
+                'Orden': datos_ot['orden'],
