@@ -11,6 +11,25 @@ st.title("📋 Auditor Masivo de Órdenes de Trabajo")
 st.markdown("Carga múltiples archivos Excel en lote. Clasificación automática con motor de alertas y reglas de negocio avanzadas.")
 st.write("---")
 
+# Lista de tus 15 ítems prioritarios (para alineación exacta de nombres)
+ITEMS_PRIORITARIOS = [
+    "HORÓMETRO",
+    "MOTIVO DETENCIÓN DEL EQUIPO",
+    "CÓDIGO COMPONENTE SMCS",
+    "CÓDIGO MODIFICADOR",
+    "CÓDIGO TRABAJO",
+    "DESCRIPCIÓN DE SÍNTOMA",
+    "CÓDIGO SÍNTOMA",
+    "DESCRIPCIÓN DE LA CAUSA",
+    "CÓDIGO CAUSA",
+    "TIPO TAREA",
+    "TAREA PRINCIPAL",
+    "DESCRIPCIÓN DE ACTIVIDADES",
+    "REGISTRO INFORME SIMS",
+    "FIRMA JEFE TURNO (NOMBRE + RUT)",
+    "FIRMA TÉCNICO RESPONSABLE (NOMBRE + RUT)"
+]
+
 # 2. Función de auditoría técnica
 def auditar_archivos_masivos(lista_archivos):
     reporte_errores = []
@@ -36,50 +55,48 @@ def auditar_archivos_masivos(lista_archivos):
             errores_en_este_archivo = 0
 
             # -------------------------------------------------------------------------
-            # 1. LISTA UNIFICADA DE CAMPOS VACÍOS (PÁGINA 1 Y PÁGINA 2)
+            # 1. LISTA DE CAMPOS (REVISADA CON TUS 15 ÍTEMS CRÍTICOS)
             # -------------------------------------------------------------------------
             definicion_campos = [
-                # --- PÁGINA 1 ---
+                # --- LOS 15 ÍTEMS PRIORITARIOS EN CRÍTICO ---
+                ("Página 1", "HORÓMETRO", hoja1, ["G13"], "🚨 CRÍTICO"),
+                ("Página 1", "MOTIVO DETENCIÓN DEL EQUIPO", hoja1, ["AB25"], "🚨 CRÍTICO"),
+                ("Página 1", "CÓDIGO COMPONENTE SMCS", hoja1, ["Q42"], "🚨 CRÍTICO"),
+                ("Página 1", "CÓDIGO MODIFICADOR", hoja1, ["T42"], "🚨 CRÍTICO"),
+                ("Página 1", "CÓDIGO TRABAJO", hoja1, ["W42"], "🚨 CRÍTICO"),
+                ("Página 1", "TIPO TAREA", hoja1, ["BO42"], "🚨 CRÍTICO"),
+                ("Página 1", "TAREA PRINCIPAL", hoja1, ["BV42"], "🚨 CRÍTICO"),
+                ("Página 1", "DESCRIPCIÓN DE ACTIVIDADES", hoja1, ["Z42"], "🚨 CRÍTICO"),
+                ("Página 1", "REGISTRO INFORME SIMS", hoja1, ["AW25"], "🚨 CRÍTICO"),
+                
+                # Firmas unificadas (Nombre + RUT)
+                ("Página 2", "FIRMA JEFE TURNO (NOMBRE + RUT)", hoja2, ["C238", "C244"], "🚨 CRÍTICO"),
+                ("Página 2", "FIRMA TÉCNICO RESPONSABLE (NOMBRE + RUT)", hoja2, ["BD239", "BD243"], "🚨 CRÍTICO"),
+
+                # --- OTROS CAMPOS DE APOYO (PÁGINA 1 Y 2) ---
                 ("Página 1", "EQUIPO", hoja1, ["G7"], "🚨 CRÍTICO"),
-                ("Página 1", "HOROMETRO", hoja1, ["G13"], "🚨 CRÍTICO"),
-                ("Página 1", "TURNO", hoja1, ["G19"], "🚨 CRÍTICO"),
                 ("Página 1", "ORDEN DE PEDIDO / SALIDA DE BODEGA", hoja1, ["G25"], "⚠️ NO CRÍTICO"),
                 ("Página 1", "INICIO (Fecha y Hora)", hoja1, ["X9", "AB9"], "🚨 CRÍTICO"),
                 ("Página 1", "FINAL (Fecha y Hora)", hoja1, ["X11", "AB11"], "🚨 CRÍTICO"),
                 ("Página 1", "UBICACIÓN (Taller o Terreno)", hoja1, ["R21", "Y21"], "🚨 CRÍTICO"),
-                ("Página 1", "MOTIVO DETENCIÓN DEL EQUIPO", hoja1, ["AB25"], "🚨 CRÍTICO"),
-                ("Página 1", "TIPO DETENCIÓN: PLANEADO", hoja1, ["AQ13"], "⚠️ NO CRÍTICO"),
-                ("Página 1", "TIPO DETENCIÓN: IMPREVISTO", hoja1, ["AQ15"], "⚠️ NO CRÍTICO"),
-                ("Página 1", "TIPO DETENCIÓN: ACCIDENTE", hoja1, ["AQ17"], "⚠️ NO CRÍTICO"),
                 ("Página 1", "RESPONSABILIDAD: DEALER (FINNING)", hoja1, ["AQ13", "AQ15", "AQ17"], "🚨 CRÍTICO"),
                 ("Página 1", "RESPONSABILIDAD: CUSTOMER (CLIENTE)", hoja1, ["AW13", "AW15", "AW17"], "🚨 CRÍTICO"),
                 ("Página 1", "EQUIPO ENTREGADO (SI o NO)", hoja1, ["BL10", "BO10"], "🚨 CRÍTICO"),
-                
-                # --- PÁGINA 1: INFORMACIÓN DEL TRABAJO ---
                 ("Página 1", "HORA INICIO ACTIVIDAD", hoja1, ["B42"], "🚨 CRÍTICO"),
                 ("Página 1", "HORA TERMINO ACTIVIDAD", hoja1, ["F42"], "🚨 CRÍTICO"),
                 ("Página 1", "Nº ORDEN SERVICIO", hoja1, ["J42"], "🚨 CRÍTICO"),
-                ("Página 1", "CÓDIGO COMPONENTE SMCS", hoja1, ["Q42"], "⚠️ NO CRÍTICO"),
-                ("Página 1", "CÓDIGO MODIFICADOR", hoja1, ["T42"], "⚠️ NO CRÍTICO"),
-                ("Página 1", "CÓDIGO TRABAJO", hoja1, ["W42"], "⚠️ NO CRÍTICO"),
-                ("Página 1", "TIPO TAREA", hoja1, ["BO42"], "⚠️ NO CRÍTICO"),
-                ("Página 1", "TAREA PRINCIPAL", hoja1, ["BV42"], "⚠️ NO CRÍTICO"),
 
-                # --- PÁGINA 2 ---
+                # --- PÁGINA 2 ADICIONALES ---
                 ("Página 2", "DESCRIPCIÓN DE LA PIEZA", hoja2, ["E189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "CANTIDAD", hoja2, ["X189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "CÓDIGO SERVICIO", hoja2, ["AA189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "N° GRUPO", hoja2, ["AE189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "DESCRIPCIÓN DEL GRUPO", hoja2, ["AJ186", "AJ189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "¿Llegó al fin de su vida útil?", hoja2, ["AR189"], "⚠️ NO CRÍTICO"),
-                ("Página 2", "COMENTARIOS", hoja2, ["AU189"], "⚠️ NO CRÍTICO"),
-                ("Página 2", "VALIDACIÓN OT: NOMBRE JEFE TURNO", hoja2, ["C238"], "🚨 CRÍTICO"),
-                ("Página 2", "VALIDACIÓN OT: RUT JEFE TURNO", hoja2, ["C244"], "🚨 CRÍTICO"),
-                ("Página 2", "TECNICO RESPONSABLE: NOMBRE", hoja2, ["BD239"], "🚨 CRÍTICO"),
-                ("Página 2", "TECNICO RESPONSABLE: RUT", hoja2, ["BD243"], "🚨 CRÍTICO"),
+                ("Página 2", "COMENTARIOS", hoja2, ["AU189"], "⚠️ NO CRÍTICO")
             ]
 
-            # Procesamos validación base de celdas vacías
+            # Validar celdas vacías
             for num_pagina, nombre, hoja_obj, lista_celdas, criticidad in definicion_campos:
                 campo_completado = False
                 for celda_id in lista_celdas:
@@ -101,7 +118,7 @@ def auditar_archivos_masivos(lista_archivos):
                     })
 
             # -------------------------------------------------------------------------
-            # 2. MOTOR DE ALERTAS INTELIGENTES (VALORES PROHIBIDOS ESPECÍFICOS)
+            # 2. ALERTAS DE TUS ÍTEMS DE SÍNTOMA Y CAUSA (CRÍTICO)
             # -------------------------------------------------------------------------
             val_z42 = hoja1["Z42"].value
             val_ao42 = hoja1["AO42"].value
@@ -109,10 +126,10 @@ def auditar_archivos_masivos(lista_archivos):
             val_bh42 = hoja1["BH42"].value
 
             alertas_especificas = [
-                ("Página 1", "DESCRIPCIÓN DEL SÍNTOMA", "Z42", val_z42, "SIN INFORMACION", "Contiene texto prohibido 'SIN INFORMACION'", "🚨 CRÍTICO", "igual_texto"),
-                ("Página 1", "CÓDIGO SÍNTOMA", "AO42", val_ao42, "156", "Alerta: Se detectó el código restringido '156'", "🚨 CRÍTICO", "igual_texto"),
-                ("Página 1", "DESCRIPCIÓN DE LA CAUSA", "AR42", val_ar42, "OTROS", "Contiene texto no permitido 'OTROS'", "🚨 CRÍTICO", "igual_texto"),
-                ("Página 1", "CÓDIGO CAUSA CRÍTICO", "BH42", val_bh42, ["6.6", "6,6", "7.1", "7,1"], "Contiene código de falla crítico", "🚨 CRÍTICO", "en_lista")
+                ("Página 1", "DESCRIPCIÓN DE SÍNTOMA", "Z42", val_z42, "SIN INFORMACION", "Contiene texto prohibido 'SIN INFORMACION'", "🚨 CRÍTICO", "igual_texto"),
+                ("Página 1", "CÓDIGO SÍNTOMA", "AO42", val_ao42, "156", "Alerta: Código restringido '156'", "🚨 CRÍTICO", "igual_texto"),
+                ("Página 1", "DESCRIPCIÓN DE LA CAUSA", "AR42", val_ar42, "OTROS", "Texto no permitido 'OTROS'", "🚨 CRÍTICO", "igual_texto"),
+                ("Página 1", "CÓDIGO CAUSA", "BH42", val_bh42, ["6.6", "6,6", "7.1", "7,1"], "Código de falla crítico detectado", "🚨 CRÍTICO", "en_lista")
             ]
 
             for num_pag, nom_alerta, celda_id, val_real, val_prohibido, msg_error, crit, tipo_verif in alertas_especificas:
@@ -138,7 +155,7 @@ def auditar_archivos_masivos(lista_archivos):
                         })
 
             # -------------------------------------------------------------------------
-            # 3. REGLA CONDICIONAL AVANZADA (PÁGINA 2 - PALABRA "CAMBIO")
+            # 3. REGLA CONDICIONAL "CAMBIO"
             # -------------------------------------------------------------------------
             contiene_cambio = False
             celda_origen_cambio = ""
@@ -152,11 +169,10 @@ def auditar_archivos_masivos(lista_archivos):
             val_b189 = hoja2["B189"].value
             txt_b189 = str(val_b189).strip().lower() if val_b189 is not None else ""
             
-            # Si B189 está vacío, evaluamos si es crítico o advertencia según la palabra "cambio"
             if val_b189 is None or txt_b189 in ["", "no", "none"]:
                 errores_en_este_archivo += 1
                 crit_final = "🚨 CRÍTICO" if contiene_cambio else "⚠️ NO CRÍTICO"
-                msg_final = f"Obligatorio rellenar por palabra 'cambio' detectada en {celda_origen_cambio}" if contiene_cambio else "Celda vacía u omitida"
+                msg_final = f"Obligatorio rellenar por 'cambio' en {celda_origen_cambio}" if contiene_cambio else "Celda vacía u omitida"
                 
                 reporte_errores.append({
                     "Archivo Excel": nombre_archivo,
@@ -184,7 +200,7 @@ def auditar_archivos_masivos(lista_archivos):
     return reporte_errores, total_archivos, archivos_con_errores
 
 
-# 3. Interfaz de Usuario (Cargador y Ejecución)
+# 3. Interfaz de Usuario
 archivos_subidos = st.file_uploader(
     "Selecciona las Órdenes de Trabajo en formato Excel (.xlsx)", 
     type=["xlsx"], 
@@ -200,7 +216,7 @@ if archivos_subidos:
         st.success("¡Auditoría finalizada con éxito!")
         st.write("---")
 
-        # 4. Indicadores Clave (KPIs)
+        # 4. Indicadores Clave
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Total Archivos", total_arch)
         col2.metric("Con Errores / Alertas", arch_con_error)
@@ -209,7 +225,7 @@ if archivos_subidos:
 
         st.write("---")
 
-        # 5. Visualizaciones de Errores y Hallazgos
+        # 5. Visualizaciones de Errores
         if not df_errores.empty:
             col_graph1, col_graph2 = st.columns(2)
             
@@ -224,21 +240,26 @@ if archivos_subidos:
                 st.plotly_chart(fig_crit, use_container_width=True)
 
             with col_graph2:
-                st.subheader("Top Campos / Alertas más Frecuentes")
+                st.subheader("Top 15 Campos / Alertas más Frecuentes")
                 top_campos = df_errores["Campo / Alerta"].value_counts().reset_index()
                 top_campos.columns = ["Campo / Alerta", "Cantidad"]
+                
+                # Muestra hasta 15 ítems
                 fig_bar = px.bar(
-                    top_campos.head(7), 
+                    top_campos.head(15), 
                     x="Cantidad", 
                     y="Campo / Alerta", 
                     orientation="h", 
                     color="Cantidad",
                     color_continuous_scale="Reds"
                 )
-                fig_bar.update_layout(yaxis={"autorange": "reversed"})
+                fig_bar.update_layout(
+                    yaxis={"autorange": "reversed"},
+                    height=500  # Más alto para adaptarse a las 15 filas
+                )
                 st.plotly_chart(fig_bar, use_container_width=True)
 
-            # 6. Tabla Detallada con Filtros
+            # 6. Tabla Detallada
             st.subheader("📊 Detalle de Hallazgos")
             
             filtro_criticidad = st.multiselect(
@@ -250,10 +271,9 @@ if archivos_subidos:
             df_filtrado = df_errores[df_errores["Criticidad"].isin(filtro_criticidad)]
             st.dataframe(df_filtrado, use_container_width=True)
 
-            # 7. Descarga del Informe en Excel y CSV
+            # 7. Descarga de Reportes
             st.subheader("📥 Descargar Reporte")
             
-            # Generador de buffer Excel
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="openpyxl") as writer:
                 df_errores.to_excel(writer, index=False, sheet_name="Hallazgos")
