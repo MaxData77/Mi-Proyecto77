@@ -11,7 +11,7 @@ st.title("📋 Auditor Masivo de Órdenes de Trabajo")
 st.markdown("Carga múltiples archivos Excel en lote. Clasificación automática con motor de alertas y reglas de negocio avanzadas.")
 st.write("---")
 
-# Lista de tus 15 ítems prioritarios (para alineación exacta de nombres)
+# Lista de tus 15 ítems prioritarios
 ITEMS_PRIORITARIOS = [
     "HORÓMETRO",
     "MOTIVO DETENCIÓN DEL EQUIPO",
@@ -55,10 +55,10 @@ def auditar_archivos_masivos(lista_archivos):
             errores_en_este_archivo = 0
 
             # -------------------------------------------------------------------------
-            # 1. LISTA DE CAMPOS (REVISADA CON TUS 15 ÍTEMS CRÍTICOS)
+            # 1. LISTA DE CAMPOS OBLIGATORIOS BASE
             # -------------------------------------------------------------------------
             definicion_campos = [
-                # --- LOS 15 ÍTEMS PRIORITARIOS EN CRÍTICO ---
+                # --- ÍTEMS PRIORITARIOS PÁGINA 1 ---
                 ("Página 1", "HORÓMETRO", hoja1, ["G13"], "🚨 CRÍTICO"),
                 ("Página 1", "MOTIVO DETENCIÓN DEL EQUIPO", hoja1, ["AB25"], "🚨 CRÍTICO"),
                 ("Página 1", "CÓDIGO COMPONENTE SMCS", hoja1, ["Q42"], "🚨 CRÍTICO"),
@@ -67,13 +67,12 @@ def auditar_archivos_masivos(lista_archivos):
                 ("Página 1", "TIPO TAREA", hoja1, ["BO42"], "🚨 CRÍTICO"),
                 ("Página 1", "TAREA PRINCIPAL", hoja1, ["BV42"], "🚨 CRÍTICO"),
                 ("Página 1", "DESCRIPCIÓN DE ACTIVIDADES", hoja1, ["Z42"], "🚨 CRÍTICO"),
-                ("Página 1", "REGISTRO INFORME SIMS", hoja1, ["AW25"], "🚨 CRÍTICO"),
                 
-                # Firmas unificadas (Nombre + RUT)
+                # --- FIRMAS PÁGINA 2 ---
                 ("Página 2", "FIRMA JEFE TURNO (NOMBRE + RUT)", hoja2, ["C238", "C244"], "🚨 CRÍTICO"),
                 ("Página 2", "FIRMA TÉCNICO RESPONSABLE (NOMBRE + RUT)", hoja2, ["BD239", "BD243"], "🚨 CRÍTICO"),
 
-                # --- OTROS CAMPOS DE APOYO (PÁGINA 1 Y 2) ---
+                # --- OTROS CAMPOS DE APOYO Y SECUNDARIOS ---
                 ("Página 1", "EQUIPO", hoja1, ["G7"], "🚨 CRÍTICO"),
                 ("Página 1", "ORDEN DE PEDIDO / SALIDA DE BODEGA", hoja1, ["G25"], "⚠️ NO CRÍTICO"),
                 ("Página 1", "INICIO (Fecha y Hora)", hoja1, ["X9", "AB9"], "🚨 CRÍTICO"),
@@ -86,7 +85,7 @@ def auditar_archivos_masivos(lista_archivos):
                 ("Página 1", "HORA TERMINO ACTIVIDAD", hoja1, ["F42"], "🚨 CRÍTICO"),
                 ("Página 1", "Nº ORDEN SERVICIO", hoja1, ["J42"], "🚨 CRÍTICO"),
 
-                # --- PÁGINA 2 ADICIONALES ---
+                # --- PÁGINA 2 CAMPOS OPCIONALES ---
                 ("Página 2", "DESCRIPCIÓN DE LA PIEZA", hoja2, ["E189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "CANTIDAD", hoja2, ["X189"], "⚠️ NO CRÍTICO"),
                 ("Página 2", "CÓDIGO SERVICIO", hoja2, ["AA189"], "⚠️ NO CRÍTICO"),
@@ -96,13 +95,13 @@ def auditar_archivos_masivos(lista_archivos):
                 ("Página 2", "COMENTARIOS", hoja2, ["AU189"], "⚠️ NO CRÍTICO")
             ]
 
-            # Validar celdas vacías
+            # Evaluar celdas vacías generales
             for num_pagina, nombre, hoja_obj, lista_celdas, criticidad in definicion_campos:
                 campo_completado = False
                 for celda_id in lista_celdas:
                     valor = hoja_obj[celda_id].value
                     texto_limpio = str(valor).strip().lower() if valor is not None else ""
-                    if valor is not None and texto_limpio not in ["", "no", "none"]:
+                    if valor is not None and texto_limpio not in ["", "no", "none", "ㅤ"]:
                         campo_completado = True
                         break
                 
@@ -118,7 +117,7 @@ def auditar_archivos_masivos(lista_archivos):
                     })
 
             # -------------------------------------------------------------------------
-            # 2. ALERTAS DE TUS ÍTEMS DE SÍNTOMA Y CAUSA (CRÍTICO)
+            # 2. MOTOR DE ALERTAS CRÍTICAS (SÍNTOMAS Y CAUSAS)
             # -------------------------------------------------------------------------
             val_z42 = hoja1["Z42"].value
             val_ao42 = hoja1["AO42"].value
@@ -155,7 +154,8 @@ def auditar_archivos_masivos(lista_archivos):
                         })
 
             # -------------------------------------------------------------------------
-            # 3. REGLA CONDICIONAL "CAMBIO"
+            # 3. REGLA CONDICIONAL "REGISTRO INFORME SIMS"
+            # Evalúa palabra "cambio" en E205, E211, E216 y exige B189 llena
             # -------------------------------------------------------------------------
             contiene_cambio = False
             celda_origen_cambio = ""
@@ -168,19 +168,18 @@ def auditar_archivos_masivos(lista_archivos):
             
             val_b189 = hoja2["B189"].value
             txt_b189 = str(val_b189).strip().lower() if val_b189 is not None else ""
-            
-            if val_b189 is None or txt_b189 in ["", "no", "none"]:
+            es_b189_vacia = (val_b189 is None or txt_b189 in ["", "no", "none", "ㅤ"])
+
+            # SOLO se gatilla error en SIMS si hay palabra "cambio" Y la celda B189 está vacía
+            if contiene_cambio and es_b189_vacia:
                 errores_en_este_archivo += 1
-                crit_final = "🚨 CRÍTICO" if contiene_cambio else "⚠️ NO CRÍTICO"
-                msg_final = f"Obligatorio rellenar por 'cambio' en {celda_origen_cambio}" if contiene_cambio else "Celda vacía u omitida"
-                
                 reporte_errores.append({
                     "Archivo Excel": nombre_archivo,
                     "Página": "Página 2",
-                    "Campo / Alerta": "N° PIEZA QUE FALLÓ",
-                    "Celdas Mapeadas": "B189",
-                    "Detalle del Error": msg_final,
-                    "Criticidad": crit_final
+                    "Campo / Alerta": "REGISTRO INFORME SIMS",
+                    "Celdas Mapeadas": f"E205/B189 ({celda_origen_cambio})",
+                    "Detalle del Error": f"Se detectó la palabra 'cambio' en {celda_origen_cambio}, por lo que el N° Pieza (B189) en Informe SIMS es obligatorio.",
+                    "Criticidad": "🚨 CRÍTICO"
                 })
 
             if errores_en_este_archivo > 0:
@@ -216,7 +215,7 @@ if archivos_subidos:
         st.success("¡Auditoría finalizada con éxito!")
         st.write("---")
 
-        # 4. Indicadores Clave
+        # 4. Indicadores Clave (KPIs)
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Total Archivos", total_arch)
         col2.metric("Con Errores / Alertas", arch_con_error)
@@ -244,7 +243,6 @@ if archivos_subidos:
                 top_campos = df_errores["Campo / Alerta"].value_counts().reset_index()
                 top_campos.columns = ["Campo / Alerta", "Cantidad"]
                 
-                # Muestra hasta 15 ítems
                 fig_bar = px.bar(
                     top_campos.head(15), 
                     x="Cantidad", 
@@ -255,11 +253,11 @@ if archivos_subidos:
                 )
                 fig_bar.update_layout(
                     yaxis={"autorange": "reversed"},
-                    height=500  # Más alto para adaptarse a las 15 filas
+                    height=500
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
 
-            # 6. Tabla Detallada
+            # 6. Tabla Detallada con Filtros
             st.subheader("📊 Detalle de Hallazgos")
             
             filtro_criticidad = st.multiselect(
@@ -271,7 +269,7 @@ if archivos_subidos:
             df_filtrado = df_errores[df_errores["Criticidad"].isin(filtro_criticidad)]
             st.dataframe(df_filtrado, use_container_width=True)
 
-            # 7. Descarga de Reportes
+            # 7. Descarga del Informe
             st.subheader("📥 Descargar Reporte")
             
             output = io.BytesIO()
