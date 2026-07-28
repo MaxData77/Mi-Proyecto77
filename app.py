@@ -114,7 +114,7 @@ def procesar_archivo_ot(file_bytes):
             'CANTIDAD': sheet['X189'].value,
             'CÓDIGO SERVICIO': sheet['AA189'].value,
             'N° GRUPO': sheet['AE189'].value,
-            'DESCRIPCIÓN DEL GRUPO': sheet['AJ186'].value, # Celda AJ186 según el mapeo
+            'DESCRIPCIÓN DEL GRUPO': sheet['AJ186'].value,
             'FIN VIDA ÚTIL?': sheet['AR189'].value,
             'COMENTARIOS SIMS': sheet['AU189'].value,
             
@@ -151,7 +151,7 @@ def procesar_archivo_ot(file_bytes):
             else:
                 resultado["campos_validados"][campo] = "Cumple"
 
-        # --- REGRELA AVANZADA: RESUMEN ANÁLISIS DE FALLA (E205, E211, E216) ---
+        # --- REGLA AVANZADA: RESUMEN ANÁLISIS DE FALLA ---
         analisis_texto = " ".join([
             str(sheet['E205'].value or ""), 
             str(sheet['E211'].value or ""), 
@@ -163,7 +163,6 @@ def procesar_archivo_ot(file_bytes):
             campos_con_hallazgo.append('RESUMEN ANÁLISIS DE FALLA')
             resultado["campos_validados"]['RESUMEN ANÁLISIS DE FALLA'] = "No cumple"
         elif "CAMBIO" in analisis_texto:
-            # Validación cruzada obligatoria con B189
             val_b189 = sheet['B189'].value
             if val_b189 is None or str(val_b189).strip() == "":
                 if 'N° PIEZA QUE FALLÓ' not in campos_con_hallazgo:
@@ -190,7 +189,7 @@ def procesar_archivo_ot(file_bytes):
 st.markdown("<h2 style='text-align: center; color: black; font-weight: bold; font-size: 32px;'>GESTION Y CONTROL EN LOS PROCESOS OPERACIONALES</h2>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center; color: black; font-size: 22px;'>Revisión de Ordenes de Trabajo OT</h3>", unsafe_allow_html=True)
 
-col_left, col_right = st.columns([1, 4])
+col_left, col_right = st.columns([1, 3])
 
 # ================= COLUMNA IZQUIERDA (Cargador) =================
 with col_left:
@@ -213,7 +212,7 @@ with col_right:
         for m, txt in zip([m1, m2, m3, m4], ["OT Revisadas", "OT con observación", "Hallazgos detectados", "OT completa"]):
             with m: st.markdown(f'<div class="metric-card"><h3>{txt}</h3><h1>0</h1></div>', unsafe_allow_html=True)
 
-        g1, g2 = st.columns([2, 1])
+        g1, g2 = st.columns()
         with g1:
             st.write("**Campos Revisados**")
             df_empty_bar = pd.DataFrame({'Campo': ['Esperando archivos...'], 'Porcentaje': [0]})
@@ -234,7 +233,7 @@ with col_right:
     else:
         # --- PROCESAMIENTO ACTIVO ---
         lista_resumen = []
-        conteo_campos = {} # Para calcular porcentajes globales del gráfico de barras
+        conteo_campos = {}
 
         for f in uploaded_files:
             datos_ot = procesar_archivo_ot(f)
@@ -242,3 +241,6 @@ with col_right:
                 'Archivo': f.name,
                 'Equipo': datos_ot['equipo'],
                 'Orden': datos_ot['orden'],
+                'Turno': datos_ot['turno'],
+                'Cant. Faltantes': datos_ot['faltantes'],
+                'Detalle Campos Faltantes': datos_ot['detalle'],
