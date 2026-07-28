@@ -77,7 +77,6 @@ def auditar_archivos_masivos(lista_archivos):
                 ("Página 2", "TECNICO RESPONSABLE: RUT", hoja2, ["BD243"], "🚨 CRÍTICO"),
             ]
 
-            # Procesamos validación base de celdas vacías
             for num_pagina, nombre, hoja_obj, lista_celdas, criticidad in definicion_campos:
                 campo_completado = False
                 for celda_id in lista_celdas:
@@ -99,63 +98,44 @@ def auditar_archivos_masivos(lista_archivos):
                     })
 
             # -------------------------------------------------------------------------
-            # 2. MOTOR DE ALERTAS INTELIGENTES (CONTENIDO ESPECÍFICO)
+            # 2. MOTOR DE ALERTAS INTELIGENTES (VALORES PROHIBIDOS ESPECÍFICOS)
             # -------------------------------------------------------------------------
-            
-            # Alerta Z42: SIN INFORMACION
             val_z42 = hoja1["Z42"].value
-            if val_z42 and str(val_z42).strip().upper() == "SIN INFORMACION":
-                errores_en_este_archivo += 1
-                reporte_errores.append({
-                    "Archivo Excel": nombre_archivo,
-                    "Página": "Página 1",
-                    "Campo / Alerta": "DESCRIPCIÓN DEL SÍNTOMA",
-                    "Celdas Mapeadas": "Z42",
-                    "Detalle del Error": "Contiene texto prohibido 'SIN INFORMACION'",
-                    "Criticidad": "🚨 CRÍTICO"
-                })
-
-            # Alerta AO42: Código 156
             val_ao42 = hoja1["AO42"].value
-            if val_ao42 and str(val_ao42).strip() == "156":
-                errores_en_este_archivo += 1
-                reporte_errores.append({
-                    "Archivo Excel": nombre_archivo,
-                    "Página": "Página 1",
-                    "Campo / Alerta": "CÓDIGO SÍNTOMA",
-                    "Celdas Mapeadas": "AO42",
-                    "Detalle del Error": "Alerta: Se detectó el código restringido '156'",
-                    "Criticidad": "🚨 CRÍTICO"
-                })
-
-            # Alerta AR42: OTROS
             val_ar42 = hoja1["AR42"].value
-            if val_ar42 and str(val_ar42).strip().upper() == "OTROS":
-                errores_en_este_archivo += 1
-                reporte_errores.append({
-                    "Archivo Excel": nombre_archivo,
-                    "Página": "Página 1",
-                    "Campo / Alerta": "DESCRIPCIÓN DE LA CAUSA",
-                    "Celdas Mapeadas": "AR42",
-                    "Detalle del Error": "Contiene texto no permitido 'OTROS'",
-                    "Criticidad": "🚨 CRÍTICO"
-                })
-
-            # Alerta BH42: Códigos de causa críticos
             val_bh42 = hoja1["BH42"].value
-            if val_bh42 and str(val_bh42).strip().replace(",", ".") in ["6.6", "7.1"]:
-                errores_en_este_archivo += 1
-                reporte_errores.append({
-                    "Archivo Excel": nombre_archivo,
-                    "Página": "Página 1",
-                    "Campo / Alerta": "CÓDIGO CAUSA CRÍTICO",
-                    "Celdas Mapeadas": "BH42",
-                    "Detalle del Error": f"Contiene código de falla crítico ({val_bh42})",
-                    "Criticidad": "🚨 CRÍTICO"
-                })
+
+            alertas_especificas = [
+                ("Página 1", "DESCRIPCIÓN DEL SÍNTOMA", "Z42", val_z42, "SIN INFORMACION", "Contiene texto prohibido 'SIN INFORMACION'", "🚨 CRÍTICO", "igual_texto"),
+                ("Página 1", "CÓDIGO SÍNTOMA", "AO42", val_ao42, "156", "Alerta: Se detectó el código restringido '156'", "🚨 CRÍTICO", "igual_texto"),
+                ("Página 1", "DESCRIPCIÓN DE LA CAUSA", "AR42", val_ar42, "OTROS", "Contiene texto no permitido 'OTROS'", "🚨 CRÍTICO", "igual_texto"),
+                ("Página 1", "CÓDIGO CAUSA CRÍTICO", "BH42", val_bh42, ["6.6", "6,6", "7.1", "7,1"], "Contiene código de falla crítico", "🚨 CRÍTICO", "en_lista")
+            ]
+
+            for num_pag, nom_alerta, celda_id, val_real, val_prohibido, msg_error, crit, tipo_verif in alertas_especificas:
+                if val_real is not None:
+                    txt_real_clean = str(val_real).strip().upper()
+                    disparar_alerta = False
+                    
+                    if tipo_verif == "igual_texto" and txt_real_clean == str(val_prohibido).upper():
+                        disparar_alerta = True
+                    elif tipo_verif == "en_lista" and str(val_real).strip() in val_prohibido:
+                        disparar_alerta = True
+                        msg_error = f"Contiene código de falla crítico ({str(val_real).strip()})"
+                        
+                    if disparar_alerta:
+                        errores_en_este_archivo += 1
+                        reporte_errores.append({
+                            "Archivo Excel": nombre_archivo,
+                            "Página": num_pag,
+                            "Campo / Alerta": nom_alerta,
+                            "Celdas Mapeadas": celda_id,
+                            "Detalle del Error": msg_error,
+                            "Criticidad": crit
+                        })
 
             # -------------------------------------------------------------------------
-            # 3. REGLA CONDICIONAL AVANZADA (PÁGINA 2)
+            # 3. REGLA CONDICIONAL AVANZADA (PÁGINA 2 - PALABRA "CAMBIO")
             # -------------------------------------------------------------------------
             contiene_cambio = False
             celda_origen_cambio = ""
@@ -169,9 +149,9 @@ def auditar_archivos_masivos(lista_archivos):
             val_b189 = hoja2["B189"].value
             txt_b189 = str(val_b189).strip().lower() if val_b189 is not None else ""
             
-            if contiene_cambio:
-                if val_b189 is None or txt_b189 in ["", "no", "none"]:
-                    errores_en_este_archivo += 1
+            if val_b189 is None or txt_b189 in ["", "no", "none"]:
+                errores_en_este_archivo += 1
+                if contiene_cambio:
                     reporte_errores.append({
                         "Archivo Excel": nombre_archivo,
                         "Página": "Página 2",
@@ -180,10 +160,21 @@ def auditar_archivos_masivos(lista_archivos):
                         "Detalle del Error": f"Obligatorio rellenar por palabra 'cambio' detectada en {celda_origen_cambio}",
                         "Criticidad": "🚨 CRÍTICO"
                     })
-            else:
-                if val_b189 is None or txt_b189 in ["", "no", "none"]:
-                    errores_en_este_archivo += 1
+                else:
                     reporte_errores.append({
                         "Archivo Excel": nombre_archivo,
                         "Página": "Página 2",
                         "Campo / Alerta": "N° PIEZA QUE FALLÓ",
+                        "Celdas Mapeadas": "B189",
+                        "Detalle del Error": "Celda vacía u omitida",
+                        "Criticidad": "⚠️ NO CRÍTICO"
+                    })
+
+            if errores_en_este_archivo > 0:
+                archivos_con_errores += 1
+
+        except Exception as e:
+            reporte_errores.append({
+                "Archivo Excel": archivo.name,
+                "Página": "Error Técnico",
+                "Campo / Alerta": "Error de estructura",
