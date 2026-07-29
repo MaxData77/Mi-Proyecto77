@@ -13,6 +13,7 @@ st.set_page_config(
 
 COLOR_VERDE = "#00FF00"
 COLOR_ROJO = "#FF0000"
+ARCHIVOS_POR_PAGINA = 3
 
 # 2. Inyección de CSS para rediseñar la interfaz
 st.markdown("""
@@ -57,6 +58,25 @@ st.markdown("""
     }
     div[data-testid="stFileUploader"] label {
         color: #FFC000 !important;
+    }
+    /* Oculta la lista nativa de archivos cargados; usamos nuestra propia lista paginada */
+    div[data-testid="stFileUploaderFileList"] {
+        display: none !important;
+    }
+    .file-pill {
+        background-color: #262626;
+        color: #FFC000;
+        border-radius: 8px;
+        padding: 6px 10px;
+        margin-bottom: 6px;
+        font-size: 13px;
+        text-align: left;
+    }
+    .file-page-info {
+        color: #FFC000;
+        font-size: 12px;
+        text-align: center;
+        margin-top: 6px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -188,10 +208,10 @@ def procesar_archivo_ot(file_bytes):
 st.markdown("<h2 style='text-align: center; color: black; font-weight: bold; font-size: 32px;'>GESTION Y CONTROL EN LOS PROCESOS OPERACIONALES</h2>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center; color: black; font-size: 22px;'>Revisión de Ordenes de Trabajo OT</h3>", unsafe_allow_html=True)
 
-col_left, col_right = st.columns([1, 3])
-
-# ================= COLUMNA IZQUIERDA (Cargador) =================
-with col_left:
+# ================= BARRA LATERAL (Cargador) =================
+# Al vivir en st.sidebar, Streamlit agrega automáticamente la flecha
+# de colapsar/expandir en la esquina superior izquierda.
+with st.sidebar:
     st.markdown("""
         <div class="upload-container">
             <p style="color: #FFC000; font-weight: bold; font-size: 14px; margin-bottom: 8px;">
@@ -199,109 +219,146 @@ with col_left:
             </p>
         </div>
     """, unsafe_allow_html=True)
-    
+
     uploaded_files = st.file_uploader("", accept_multiple_files=True, type=['xlsx'])
+
+    # --- LISTA PROPIA PAGINADA (3 archivos por página) ---
+    if uploaded_files:
+        total_archivos = len(uploaded_files)
+        total_paginas = max(1, (total_archivos - 1) // ARCHIVOS_POR_PAGINA + 1)
+
+        if "pagina_archivos" not in st.session_state:
+            st.session_state.pagina_archivos = 1
+        # Si se suben/quitan archivos y la página queda fuera de rango, la ajustamos
+        if st.session_state.pagina_archivos > total_paginas:
+            st.session_state.pagina_archivos = total_paginas
+
+        pagina_actual = st.session_state.pagina_archivos
+        inicio = (pagina_actual - 1) * ARCHIVOS_POR_PAGINA
+        fin = inicio + ARCHIVOS_POR_PAGINA
+
+        for f in uploaded_files[inicio:fin]:
+            tamano_kb = f.size / 1024
+            st.markdown(
+                f'<div class="file-pill">📄 {f.name}<br><small>{tamano_kb:.1f} KB</small></div>',
+                unsafe_allow_html=True
+            )
+
+        col_prev, col_info, col_next = st.columns([1, 2, 1])
+        with col_prev:
+            if st.button("◀", disabled=(pagina_actual <= 1), use_container_width=True):
+                st.session_state.pagina_archivos -= 1
+                st.rerun()
+        with col_info:
+            st.markdown(
+                f'<div class="file-page-info">Página {pagina_actual} de {total_paginas}</div>',
+                unsafe_allow_html=True
+            )
+        with col_next:
+            if st.button("▶", disabled=(pagina_actual >= total_paginas), use_container_width=True):
+                st.session_state.pagina_archivos += 1
+                st.rerun()
+
     ejecutar = st.button("Ejecutar revisión", use_container_width=True)
 
-# ================= COLUMNA DERECHA (Dashboard Analítico) =================
-with col_right:
-    if not ejecutar or not uploaded_files:
-        # Estado Inicial vacío (Dashboard en 0)
-        m1, m2, m3, m4 = st.columns(4)
-        for m, txt in zip([m1, m2, m3, m4], ["OT Revisadas", "OT con observación", "Hallazgos detectados", "OT completa"]):
-            with m: st.markdown(f'<div class="metric-card"><h3>{txt}</h3><h1>0</h1></div>', unsafe_allow_html=True)
+# ================= CONTENIDO PRINCIPAL (Dashboard Analítico) =================
+if not ejecutar or not uploaded_files:
+    # Estado Inicial vacío (Dashboard en 0)
+    m1, m2, m3, m4 = st.columns(4)
+    for m, txt in zip([m1, m2, m3, m4], ["OT Revisadas", "OT con observación", "Hallazgos detectados", "OT completa"]):
+        with m: st.markdown(f'<div class="metric-card"><h3>{txt}</h3><h1>0</h1></div>', unsafe_allow_html=True)
 
-        g1, g2 = st.columns(2)
-        with g1:
-            st.write("**Campos Revisados**")
-            df_empty_bar = pd.DataFrame({'Campo': ['Esperando archivos...'], 'Porcentaje': [0]})
-            fig_bar = px.bar(df_empty_bar, x='Porcentaje', y='Campo', orientation='h', color_discrete_sequence=['#CCCCCC'])
-            fig_bar.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
-            st.plotly_chart(fig_bar, use_container_width=True)
-        with g2:
-            st.write("**Total OT Revisadas**")
-            df_empty_pie = pd.DataFrame({'Estado': ['Sin datos'], 'Cantidad': [1]})
-            fig_pie = px.pie(df_empty_pie, values='Cantidad', names='Estado', hole=0.6, color_discrete_sequence=['#CCCCCC'])
-            fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
-            st.plotly_chart(fig_pie, use_container_width=True)
+    g1, g2 = st.columns(2)
+    with g1:
+        st.write("**Campos Revisados**")
+        df_empty_bar = pd.DataFrame({'Campo': ['Esperando archivos...'], 'Porcentaje': [0]})
+        fig_bar = px.bar(df_empty_bar, x='Porcentaje', y='Campo', orientation='h', color_discrete_sequence=['#CCCCCC'])
+        fig_bar.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
+        st.plotly_chart(fig_bar, use_container_width=True)
+    with g2:
+        st.write("**Total OT Revisadas**")
+        df_empty_pie = pd.DataFrame({'Estado': ['Sin datos'], 'Cantidad': [1]})
+        fig_pie = px.pie(df_empty_pie, values='Cantidad', names='Estado', hole=0.6, color_discrete_sequence=['#CCCCCC'])
+        fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
+        st.plotly_chart(fig_pie, use_container_width=True)
 
-        st.write("**Resumen por OT**")
-        df_empty_table = pd.DataFrame(columns=['Archivo', 'Equipo', 'Orden', 'Turno', 'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado'])
-        st.dataframe(df_empty_table, use_container_width=True)
+    st.write("**Resumen por OT**")
+    df_empty_table = pd.DataFrame(columns=['Archivo', 'Equipo', 'Orden', 'Turno', 'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado'])
+    st.dataframe(df_empty_table, use_container_width=True)
 
-    else:
-        # --- PROCESAMIENTO ACTIVO ---
-        lista_resumen = []
-        conteo_campos = {}
+else:
+    # --- PROCESAMIENTO ACTIVO ---
+    lista_resumen = []
+    conteo_campos = {}
 
-        for f in uploaded_files:
-            datos_ot = procesar_archivo_ot(f)
-            lista_resumen.append({
-                'Archivo': f.name,
-                'Equipo': datos_ot['equipo'],
-                'Orden': datos_ot['orden'],
-                'Turno': datos_ot['turno'],
-                'Cant. Faltantes': datos_ot['faltantes'],
-                'Detalle Campos Faltantes': datos_ot['detalle'],
-                'Estado': datos_ot['estado']
-            })
+    for f in uploaded_files:
+        datos_ot = procesar_archivo_ot(f)
+        lista_resumen.append({
+            'Archivo': f.name,
+            'Equipo': datos_ot['equipo'],
+            'Orden': datos_ot['orden'],
+            'Turno': datos_ot['turno'],
+            'Cant. Faltantes': datos_ot['faltantes'],
+            'Detalle Campos Faltantes': datos_ot['detalle'],
+            'Estado': datos_ot['estado']
+        })
 
-            for campo, estado_campo in datos_ot['campos_validados'].items():
-                if campo not in conteo_campos:
-                    conteo_campos[campo] = {'Cumple': 0, 'No cumple': 0}
-                conteo_campos[campo][estado_campo] += 1
+        for campo, estado_campo in datos_ot['campos_validados'].items():
+            if campo not in conteo_campos:
+                conteo_campos[campo] = {'Cumple': 0, 'No cumple': 0}
+            conteo_campos[campo][estado_campo] += 1
 
-        df_resumen = pd.DataFrame(lista_resumen)
+    df_resumen = pd.DataFrame(lista_resumen)
 
-        total_ot = len(df_resumen)
-        ot_con_observacion = int((df_resumen['Estado'] == 'No cumple').sum())
-        hallazgos_totales = int(df_resumen['Cant. Faltantes'].sum())
-        ot_completas = int((df_resumen['Estado'] == 'Cumple').sum())
+    total_ot = len(df_resumen)
+    ot_con_observacion = int((df_resumen['Estado'] == 'No cumple').sum())
+    hallazgos_totales = int(df_resumen['Cant. Faltantes'].sum())
+    ot_completas = int((df_resumen['Estado'] == 'Cumple').sum())
 
-        # --- MÉTRICAS SUPERIORES ---
-        m1, m2, m3, m4 = st.columns(4)
-        valores = [total_ot, ot_con_observacion, hallazgos_totales, ot_completas]
-        titulos = ["OT Revisadas", "OT con observación", "Hallazgos detectados", "OT completa"]
-        for m, txt, val in zip([m1, m2, m3, m4], titulos, valores):
-            with m:
-                st.markdown(f'<div class="metric-card"><h3>{txt}</h3><h1>{val}</h1></div>', unsafe_allow_html=True)
+    # --- MÉTRICAS SUPERIORES ---
+    m1, m2, m3, m4 = st.columns(4)
+    valores = [total_ot, ot_con_observacion, hallazgos_totales, ot_completas]
+    titulos = ["OT Revisadas", "OT con observación", "Hallazgos detectados", "OT completa"]
+    for m, txt, val in zip([m1, m2, m3, m4], titulos, valores):
+        with m:
+            st.markdown(f'<div class="metric-card"><h3>{txt}</h3><h1>{val}</h1></div>', unsafe_allow_html=True)
 
-        # --- GRÁFICAS ---
-        g1, g2 = st.columns(2)
-        with g1:
-            st.write("**Campos Revisados**")
-            if len(conteo_campos) > 0:
-                df_conteo = pd.DataFrame([
-                    {
-                        'Campo': campo,
-                        'Porcentaje': (v['No cumple'] / total_ot) * 100 if total_ot > 0 else 0
-                    }
-                    for campo, v in conteo_campos.items()
-                ]).sort_values('Porcentaje', ascending=True)
+    # --- GRÁFICAS ---
+    g1, g2 = st.columns(2)
+    with g1:
+        st.write("**Campos Revisados**")
+        if len(conteo_campos) > 0:
+            df_conteo = pd.DataFrame([
+                {
+                    'Campo': campo,
+                    'Porcentaje': (v['No cumple'] / total_ot) * 100 if total_ot > 0 else 0
+                }
+                for campo, v in conteo_campos.items()
+            ]).sort_values('Porcentaje', ascending=True)
 
-                fig_bar = px.bar(
-                    df_conteo, x='Porcentaje', y='Campo', orientation='h',
-                    color_discrete_sequence=[COLOR_ROJO]
-                )
-                fig_bar.update_layout(height=550, margin=dict(l=0, r=0, t=10, b=0))
-                st.plotly_chart(fig_bar, use_container_width=True)
-            else:
-                st.info("No hay datos de campos para mostrar.")
-
-        with g2:
-            st.write("**Total OT Revisadas**")
-            df_pie = pd.DataFrame({
-                'Estado': ['Cumple', 'No cumple'],
-                'Cantidad': [ot_completas, ot_con_observacion]
-            })
-            fig_pie = px.pie(
-                df_pie, values='Cantidad', names='Estado', hole=0.6,
-                color='Estado',
-                color_discrete_map={'Cumple': COLOR_VERDE, 'No cumple': COLOR_ROJO}
+            fig_bar = px.bar(
+                df_conteo, x='Porcentaje', y='Campo', orientation='h',
+                color_discrete_sequence=[COLOR_ROJO]
             )
-            fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
-            st.plotly_chart(fig_pie, use_container_width=True)
+            fig_bar.update_layout(height=550, margin=dict(l=0, r=0, t=10, b=0))
+            st.plotly_chart(fig_bar, use_container_width=True)
+        else:
+            st.info("No hay datos de campos para mostrar.")
 
-        # --- TABLA RESUMEN ---
-        st.write("**Resumen por OT**")
-        st.dataframe(df_resumen, use_container_width=True)
+    with g2:
+        st.write("**Total OT Revisadas**")
+        df_pie = pd.DataFrame({
+            'Estado': ['Cumple', 'No cumple'],
+            'Cantidad': [ot_completas, ot_con_observacion]
+        })
+        fig_pie = px.pie(
+            df_pie, values='Cantidad', names='Estado', hole=0.6,
+            color='Estado',
+            color_discrete_map={'Cumple': COLOR_VERDE, 'No cumple': COLOR_ROJO}
+        )
+        fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    # --- TABLA RESUMEN ---
+    st.write("**Resumen por OT**")
+    st.dataframe(df_resumen, use_container_width=True)
