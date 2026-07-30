@@ -4,6 +4,7 @@ import numpy as np
 import plotly.express as px
 import openpyxl
 import io
+import unicodedata
 
 # 1. Configuración de página en modo ancho (Wide)
 st.set_page_config(
@@ -14,6 +15,28 @@ st.set_page_config(
 COLOR_VERDE = "#00FF00"
 COLOR_ROJO = "#FF0000"
 ARCHIVOS_POR_PAGINA = 3
+
+# Carácter "Hangul Filler" (U+3164) que Excel deja en checkboxes no marcados;
+# hay que tratarlo como vacío igual que un espacio en blanco.
+CARACTER_FANTASMA = '\u3164'
+
+# Orden fijo de los 14 ítems que se muestran en el gráfico de barras
+BAR_ITEMS_ORDEN = [
+    'HORÓMETRO',
+    'MOTIVO DETENCIÓN DEL EQUIPO',
+    'CÓDIGO COMPONENTE SMCS',
+    'CÓDIGO MODIFICADOR',
+    'CÓDIGO TRABAJO',
+    'DESCRIPCIÓN DEL SÍNTOMA',
+    'CÓDIGO SÍNTOMA',
+    'DESCRIPCIÓN DE LA CAUSA',
+    'CÓDIGO CAUSA',
+    'DESCRIPCIÓN DE ACTIVIDADES',
+    'INFORME SIMS',
+    'RESUMEN ANÁLISIS DE FALLA',
+    'JEFE DE TURNO NOMBRE Y RUT',
+    'TÉCNICO RESPONSABLE NOMBRE Y RUT',
+]
 
 # 2. Inyección de CSS para rediseñar la interfaz
 st.markdown("""
@@ -59,7 +82,6 @@ st.markdown("""
     div[data-testid="stFileUploader"] label {
         color: #FFC000 !important;
     }
-    /* Oculta la lista nativa de archivos cargados; usamos nuestra propia lista paginada */
     div[data-testid="stFileUploaderFileList"] {
         display: none !important;
     }
@@ -81,6 +103,26 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+
+def _limpiar(valor):
+    """Convierte el valor de una celda a texto limpio: quita espacios y el
+    carácter fantasma que Excel deja en checkboxes no marcados."""
+    if valor is None:
+        return ""
+    return str(valor).replace(CARACTER_FANTASMA, "").strip()
+
+
+def _quitar_tildes(texto):
+    """Normaliza texto para comparar sin tildes (CAMBIÓ -> CAMBIO)."""
+    nfkd = unicodedata.normalize('NFKD', texto)
+    return "".join([c for c in nfkd if not unicodedata.combining(c)])
+
+
+def _esta_marcado(valor):
+    """True si la celda de un checkbox contiene una 'X' (mayúscula o minúscula)."""
+    return _limpiar(valor).upper() == "X"
+
+
 # 3. Función de Procesamiento con Todas las Reglas de Negocio Oficiales
 def procesar_archivo_ot(file_bytes):
     resultado = {
@@ -90,127 +132,194 @@ def procesar_archivo_ot(file_bytes):
         "faltantes": 0,
         "detalle": "Ninguno",
         "estado": "Cumple",
-        "campos_validados": {}
+        "categoria": "-",
+        "seccion": "-",
+        "campos_bar": {item: "Cumple" for item in BAR_ITEMS_ORDEN}
     }
     try:
         file_bytes.seek(0)
         file_stream = io.BytesIO(file_bytes.read())
         wb = openpyxl.load_workbook(file_stream, data_only=True)
         sheet = wb.active
-        
-        # --- EXTRACCIÓN DE DATOS DE CABECERA ---
+
+        # --- EXTRACCIÓN DE DATOS DE CABECERA (para columnas Equipo/Orden/Turno) ---
         val_equipo = sheet['G7'].value
         val_orden = sheet['J42'].value or sheet['G25'].value
         val_turno = sheet['G19'].value
-        
+
         if val_equipo and str(val_equipo).strip(): resultado["equipo"] = str(val_equipo).strip()
         if val_orden and str(val_orden).strip(): resultado["orden"] = str(val_orden).strip()
         if val_turno and str(val_turno).strip(): resultado["turno"] = str(val_turno).strip()
 
-        # --- DICCIONARIO GENERAL DE CELDAS A EVALUAR ---
-        campos_criticos = {
-            # PÁGINA 1: Antecedentes y Trabajo
-            'HORÓMETRO': sheet['G13'].value,
-            'ORDEN DE PEDIDO': sheet['G25'].value,
-            'MOTIVO DETENCIÓN': sheet['AB25'].value,
-            'FECHA INICIO': sheet['X9'].value,
-            'HORA INICIO': sheet['AB9'].value,
-            'FECHA FINAL': sheet['X11'].value,
-            'HORA FINAL': sheet['AB11'].value,
-            'HORA TRABAJO INICIO': sheet['B42'].value,
-            'HORA TRABAJO TERMINO': sheet['F42'].value,
-            'CÓDIGO SMCS': sheet['Q42'].value,
-            'CÓDIGO MODIFICADOR': sheet['T42'].value,
-            'CÓDIGO TRABAJO': sheet['W42'].value,
-            'DESCRIPCIÓN SÍNTOMA': sheet['Z42'].value,
-            'CÓDIGO SÍNTOMA': sheet['AO42'].value,
-            'DESCRIPCION CAUSA': sheet['AR42'].value,
-            'CÓDIGO CAUSA': sheet['BH42'].value,
-            'TIPO TAREA': sheet['BO42'].value,
-            'TAREA PRINCIPAL': sheet['BV42'].value,
-            
-            # PÁGINA 2: Informe SIMS
+        # --- CAMPOS MAESTROS: (etiqueta, celda, categoría, sección) ---
+        CAMPOS_MAESTRO = [
+            ("EQUIPO", 'G7', "No Crítico", "Antecedentes de la Detención"),
+            ("HORÓMETRO", 'G13', "Crítico", "Antecedentes de la Detención"),
+            ("TURNO", 'G19', "No Crítico", "Antecedentes de la Detención"),
+            ("ORDEN DE PEDIDO / SALIDA DE BODEGA", 'G25', "No Crítico", "Antecedentes de la Detención"),
+            ("FECHA INICIO DETENCIÓN", 'X9', "No Crítico", "Antecedentes de la Detención"),
+            ("HORA INICIO DETENCIÓN", 'AB9', "No Crítico", "Antecedentes de la Detención"),
+            ("FECHA FINAL DETENCIÓN", 'X11', "No Crítico", "Antecedentes de la Detención"),
+            ("HORA FINAL DETENCIÓN", 'AB11', "No Crítico", "Antecedentes de la Detención"),
+            ("MOTIVO DETENCIÓN DEL EQUIPO", 'AB25', "Crítico", "Antecedentes de la Detención"),
+
+            ("HORA INICIO TRABAJO", 'B42', "No Crítico", "Información del Trabajo"),
+            ("HORA TERMINO TRABAJO", 'F42', "No Crítico", "Información del Trabajo"),
+            ("N° ORDEN SERVICIO", 'J42', "No Crítico", "Información del Trabajo"),
+            ("CÓDIGO COMPONENTE SMCS", 'Q42', "Crítico", "Información del Trabajo"),
+            ("CÓDIGO MODIFICADOR", 'T42', "Crítico", "Información del Trabajo"),
+            ("CÓDIGO TRABAJO", 'W42', "Crítico", "Información del Trabajo"),
+            ("DESCRIPCIÓN DEL SÍNTOMA", 'Z42', "Crítico", "Información del Trabajo"),
+            ("CÓDIGO SÍNTOMA", 'AO42', "Crítico", "Información del Trabajo"),
+            ("DESCRIPCIÓN DE LA CAUSA", 'AR42', "Crítico", "Información del Trabajo"),
+            ("CÓDIGO CAUSA", 'BH42', "Crítico", "Información del Trabajo"),
+            ("TIPO TAREA", 'BO42', "No Crítico", "Información del Trabajo"),
+            ("TAREA PRINCIPAL", 'BV42', "No Crítico", "Información del Trabajo"),
+
+            ("JEFE TURNO (NOMBRE)", 'C238', "Crítico", "Firma Responsables"),
+            ("JEFE TURNO (RUT)", 'C244', "Crítico", "Firma Responsables"),
+            ("TÉCNICO (NOMBRE)", 'BD239', "Crítico", "Firma Responsables"),
+            ("TÉCNICO (RUT)", 'BD243', "Crítico", "Firma Responsables"),
+        ]
+
+        campos_con_hallazgo = []  # lista de (etiqueta, categoria, seccion)
+        campos_estado = {}        # etiqueta -> "Cumple" / "No cumple"
+
+        for label, celda, categoria, seccion in CAMPOS_MAESTRO:
+            val_str = _limpiar(sheet[celda].value).upper()
+            no_cumple = (val_str == "")
+
+            # --- Reglas especiales adicionales ---
+            if label == 'DESCRIPCIÓN DEL SÍNTOMA' and val_str == "SIN INFORMACION":
+                no_cumple = True
+            elif label == 'CÓDIGO SÍNTOMA' and val_str == "156":
+                no_cumple = True
+            elif label == 'DESCRIPCIÓN DE LA CAUSA' and val_str == "OTROS":
+                no_cumple = True
+            elif label == 'CÓDIGO CAUSA' and val_str in ["6.6", "6,6", "7.1", "7,1"]:
+                no_cumple = True
+
+            campos_estado[label] = "No cumple" if no_cumple else "Cumple"
+            if no_cumple:
+                campos_con_hallazgo.append((label, categoria, seccion))
+
+        # --- UBICACIÓN DEL EQUIPO: TALLER (R21) o TERRENO (Y21) ---
+        if not (_esta_marcado(sheet['R21'].value) or _esta_marcado(sheet['Y21'].value)):
+            campos_con_hallazgo.append(("UBICACIÓN DEL EQUIPO (Taller/Terreno)", "No Crítico", "Antecedentes de la Detención"))
+
+        # --- TIPO Y RESPONSABILIDAD DE LA DETENCIÓN ---
+        # Grilla 3x2: filas Planeado/Imprevisto/Accidente, columnas Dealer(AQ)/Customer(AW).
+        # Se espera exactamente una celda marcada con "X".
+        celdas_grilla = ['AQ13', 'AQ15', 'AQ17', 'AW13', 'AW15', 'AW17']
+        if not any(_esta_marcado(sheet[c].value) for c in celdas_grilla):
+            campos_con_hallazgo.append(("TIPO Y RESPONSABILIDAD DE LA DETENCIÓN", "No Crítico", "Antecedentes de la Detención"))
+
+        # --- EQUIPO ENTREGADO: SI (BL10) o NO (BO10) ---
+        if not (_esta_marcado(sheet['BL10'].value) or _esta_marcado(sheet['BO10'].value)):
+            campos_con_hallazgo.append(("EQUIPO ENTREGADO (Sí/No)", "No Crítico", "Antecedentes de la Detención"))
+
+        # --- DESCRIPCIÓN DE ACTIVIDADES (combina Tipo Tarea + Tarea Principal) ---
+        bar_actividades_cumple = (
+            campos_estado['TIPO TAREA'] == "Cumple" and campos_estado['TAREA PRINCIPAL'] == "Cumple"
+        )
+
+        # --- JEFE DE TURNO y TÉCNICO combinados (Nombre + RUT) ---
+        bar_jefe_cumple = (
+            campos_estado['JEFE TURNO (NOMBRE)'] == "Cumple" and campos_estado['JEFE TURNO (RUT)'] == "Cumple"
+        )
+        bar_tecnico_cumple = (
+            campos_estado['TÉCNICO (NOMBRE)'] == "Cumple" and campos_estado['TÉCNICO (RUT)'] == "Cumple"
+        )
+
+        # --- RESUMEN ANÁLISIS DE FALLA (E205 + E211 + E216) ---
+        analisis_texto = " ".join([
+            _limpiar(sheet['E205'].value),
+            _limpiar(sheet['E211'].value),
+            _limpiar(sheet['E216'].value)
+        ]).strip()
+        resumen_vacio = (analisis_texto == "")
+        if resumen_vacio:
+            campos_con_hallazgo.append(("RESUMEN ANÁLISIS DE FALLA", "Crítico", "Resumen Análisis de Falla"))
+        bar_resumen_cumple = not resumen_vacio
+
+        # --- LÓGICA SIMS ---
+        # Si en E205, AB25 o B98 aparece "cambio"/"cambia"/"reemplaza", se exige el bloque SIMS.
+        texto_disparador = _quitar_tildes(" ".join([
+            _limpiar(sheet['E205'].value),
+            _limpiar(sheet['AB25'].value),
+            _limpiar(sheet['B98'].value)
+        ]).upper())
+        palabras_gatillo = ["CAMBIO", "CAMBIA", "REEMPLAZA"]
+        requiere_sims = any(p in texto_disparador for p in palabras_gatillo)
+
+        campos_sims = {
             'N° PIEZA QUE FALLÓ': sheet['B189'].value,
             'DESCRIPCIÓN DE LA PIEZA': sheet['E189'].value,
             'CANTIDAD': sheet['X189'].value,
             'CÓDIGO SERVICIO': sheet['AA189'].value,
             'N° GRUPO': sheet['AE189'].value,
-            'DESCRIPCIÓN DEL GRUPO': sheet['AJ186'].value,
-            'FIN VIDA ÚTIL?': sheet['AR189'].value,
-            'COMENTARIOS SIMS': sheet['AU189'].value,
-            
-            # PÁGINA 2: Firmas Responsables
-            'JEFE TURNO (NOMBRE)': sheet['C238'].value,
-            'JEFE TURNO (RUT)': sheet['C244'].value,
-            'TECNICO (NOMBRE)': sheet['BD239'].value,
-            'TECNICO (RUT)': sheet['BD243'].value,
+            'DESCRIPCIÓN DEL GRUPO': sheet['AJ189'].value,
+            '¿LLEGÓ AL FIN DE SU VIDA ÚTIL?': sheet['AR189'].value,
+            'COMENTARIOS': sheet['AU189'].value,
         }
-        
-        campos_con_hallazgo = []
+        sims_faltantes = [k for k, v in campos_sims.items() if _limpiar(v) == ""]
 
-        # --- VALIDACIÓN DINÁMICA DE REGLAS DE NEGOCIO ---
-        for campo, valor in campos_criticos.items():
-            val_str = str(valor).strip().upper() if valor is not None else ""
-            hubo_alerta = False
-            
-            if val_str == "":
-                hubo_alerta = True
-            elif campo == 'DESCRIPCIÓN SÍNTOMA' and val_str == "SIN INFORMACION":
-                hubo_alerta = True
-            elif campo == 'CÓDIGO SÍNTOMA' and val_str == "156":
-                hubo_alerta = True
-            elif campo == 'DESCRIPCION CAUSA' and val_str == "OTROS":
-                hubo_alerta = True
-            elif campo == 'CÓDIGO CAUSA' and val_str in ["6.6", "6,6", "7.1", "7,1"]:
-                hubo_alerta = True
+        bar_sims_cumple = True
+        if requiere_sims:
+            if len(sims_faltantes) == len(campos_sims):
+                campos_con_hallazgo.append(("Falta SIMS", "Crítico", "Registro Informe SIMS"))
+                bar_sims_cumple = False
+            elif len(sims_faltantes) > 0:
+                campos_con_hallazgo.append(
+                    (f"SIMS incompleto: falta {', '.join(sims_faltantes)}", "Crítico", "Registro Informe SIMS")
+                )
+                bar_sims_cumple = False
 
-            if hubo_alerta:
-                campos_con_hallazgo.append(campo)
-                resultado["campos_validados"][campo] = "No cumple"
-            else:
-                resultado["campos_validados"][campo] = "Cumple"
-
-        # --- REGLA AVANZADA: RESUMEN ANÁLISIS DE FALLA ---
-        analisis_texto = " ".join([
-            str(sheet['E205'].value or ""), 
-            str(sheet['E211'].value or ""), 
-            str(sheet['E216'].value or "")
-        ]).strip().upper()
-        
-        resultado["campos_validados"]['RESUMEN ANÁLISIS DE FALLA'] = "Cumple"
-        if analisis_texto == "":
-            campos_con_hallazgo.append('RESUMEN ANÁLISIS DE FALLA')
-            resultado["campos_validados"]['RESUMEN ANÁLISIS DE FALLA'] = "No cumple"
-        elif "CAMBIO" in analisis_texto:
-            val_b189 = sheet['B189'].value
-            if val_b189 is None or str(val_b189).strip() == "":
-                if 'N° PIEZA QUE FALLÓ' not in campos_con_hallazgo:
-                    campos_con_hallazgo.append('N° PIEZA QUE FALLÓ')
-                resultado["campos_validados"]['N° PIEZA QUE FALLÓ'] = "No cumple"
+        # --- Consolidación de los 14 ítems del gráfico de barras ---
+        resultado["campos_bar"] = {
+            'HORÓMETRO': campos_estado['HORÓMETRO'],
+            'MOTIVO DETENCIÓN DEL EQUIPO': campos_estado['MOTIVO DETENCIÓN DEL EQUIPO'],
+            'CÓDIGO COMPONENTE SMCS': campos_estado['CÓDIGO COMPONENTE SMCS'],
+            'CÓDIGO MODIFICADOR': campos_estado['CÓDIGO MODIFICADOR'],
+            'CÓDIGO TRABAJO': campos_estado['CÓDIGO TRABAJO'],
+            'DESCRIPCIÓN DEL SÍNTOMA': campos_estado['DESCRIPCIÓN DEL SÍNTOMA'],
+            'CÓDIGO SÍNTOMA': campos_estado['CÓDIGO SÍNTOMA'],
+            'DESCRIPCIÓN DE LA CAUSA': campos_estado['DESCRIPCIÓN DE LA CAUSA'],
+            'CÓDIGO CAUSA': campos_estado['CÓDIGO CAUSA'],
+            'DESCRIPCIÓN DE ACTIVIDADES': "Cumple" if bar_actividades_cumple else "No cumple",
+            'INFORME SIMS': "Cumple" if bar_sims_cumple else "No cumple",
+            'RESUMEN ANÁLISIS DE FALLA': "Cumple" if bar_resumen_cumple else "No cumple",
+            'JEFE DE TURNO NOMBRE Y RUT': "Cumple" if bar_jefe_cumple else "No cumple",
+            'TÉCNICO RESPONSABLE NOMBRE Y RUT': "Cumple" if bar_tecnico_cumple else "No cumple",
+        }
 
         # --- CONSOLIDACIÓN DEL ESTADO FINAL ---
         cant_faltantes = len(campos_con_hallazgo)
+        resultado["faltantes"] = cant_faltantes
         if cant_faltantes > 0:
-            resultado["faltantes"] = cant_faltantes
-            resultado["detalle"] = ", ".join(campos_con_hallazgo)
+            resultado["detalle"] = ", ".join([f"{label} ({cat})" for label, cat, _ in campos_con_hallazgo])
             resultado["estado"] = "No cumple"
+            secciones_unicas = sorted(set(sec for _, _, sec in campos_con_hallazgo))
+            resultado["seccion"] = ", ".join(secciones_unicas)
+            resultado["categoria"] = "Crítico" if any(cat == "Crítico" for _, cat, _ in campos_con_hallazgo) else "No Crítico"
         else:
             resultado["detalle"] = "Completo"
             resultado["estado"] = "Cumple"
-            
+            resultado["seccion"] = "-"
+            resultado["categoria"] = "-"
+
         return resultado
     except Exception as e:
         resultado["estado"] = "No cumple"
         resultado["detalle"] = f"Error: {str(e)}"
         return resultado
 
+
 # --- ENCABEZADO DE INTERFAZ ---
 st.markdown("<h2 style='text-align: center; color: black; font-weight: bold; font-size: 32px;'>GESTION Y CONTROL EN LOS PROCESOS OPERACIONALES</h2>", unsafe_allow_html=True)
 st.markdown("<h3 style='text-align: center; color: black; font-size: 22px;'>Revisión de Ordenes de Trabajo OT</h3>", unsafe_allow_html=True)
 
 # ================= BARRA LATERAL (Cargador) =================
-# Al vivir en st.sidebar, Streamlit agrega automáticamente la flecha
-# de colapsar/expandir en la esquina superior izquierda.
 with st.sidebar:
     st.markdown("""
         <div class="upload-container">
@@ -222,14 +331,12 @@ with st.sidebar:
 
     uploaded_files = st.file_uploader("", accept_multiple_files=True, type=['xlsx'])
 
-    # --- LISTA PROPIA PAGINADA (3 archivos por página) ---
     if uploaded_files:
         total_archivos = len(uploaded_files)
         total_paginas = max(1, (total_archivos - 1) // ARCHIVOS_POR_PAGINA + 1)
 
         if "pagina_archivos" not in st.session_state:
             st.session_state.pagina_archivos = 1
-        # Si se suben/quitan archivos y la página queda fuera de rango, la ajustamos
         if st.session_state.pagina_archivos > total_paginas:
             st.session_state.pagina_archivos = total_paginas
 
@@ -263,7 +370,6 @@ with st.sidebar:
 
 # ================= CONTENIDO PRINCIPAL (Dashboard Analítico) =================
 if not ejecutar or not uploaded_files:
-    # Estado Inicial vacío (Dashboard en 0)
     m1, m2, m3, m4 = st.columns(4)
     for m, txt in zip([m1, m2, m3, m4], ["OT Revisadas", "OT con observación", "Hallazgos detectados", "OT completa"]):
         with m: st.markdown(f'<div class="metric-card"><h3>{txt}</h3><h1>0</h1></div>', unsafe_allow_html=True)
@@ -273,7 +379,7 @@ if not ejecutar or not uploaded_files:
         st.write("**Campos Revisados**")
         df_empty_bar = pd.DataFrame({'Campo': ['Esperando archivos...'], 'Porcentaje': [0]})
         fig_bar = px.bar(df_empty_bar, x='Porcentaje', y='Campo', orientation='h', color_discrete_sequence=['#CCCCCC'])
-        fig_bar.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
+        fig_bar.update_layout(height=550, margin=dict(l=0, r=0, t=10, b=0))
         st.plotly_chart(fig_bar, use_container_width=True)
     with g2:
         st.write("**Total OT Revisadas**")
@@ -283,13 +389,13 @@ if not ejecutar or not uploaded_files:
         st.plotly_chart(fig_pie, use_container_width=True)
 
     st.write("**Resumen por OT**")
-    df_empty_table = pd.DataFrame(columns=['Archivo', 'Equipo', 'Orden', 'Turno', 'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado'])
+    df_empty_table = pd.DataFrame(columns=['Archivo', 'Equipo', 'Orden', 'Turno', 'Categoría', 'Sección', 'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado'])
     st.dataframe(df_empty_table, use_container_width=True)
 
 else:
     # --- PROCESAMIENTO ACTIVO ---
     lista_resumen = []
-    conteo_campos = {}
+    conteo_campos = {item: {'Cumple': 0, 'No cumple': 0} for item in BAR_ITEMS_ORDEN}
 
     for f in uploaded_files:
         datos_ot = procesar_archivo_ot(f)
@@ -298,14 +404,14 @@ else:
             'Equipo': datos_ot['equipo'],
             'Orden': datos_ot['orden'],
             'Turno': datos_ot['turno'],
+            'Categoría': datos_ot['categoria'],
+            'Sección': datos_ot['seccion'],
             'Cant. Faltantes': datos_ot['faltantes'],
             'Detalle Campos Faltantes': datos_ot['detalle'],
             'Estado': datos_ot['estado']
         })
 
-        for campo, estado_campo in datos_ot['campos_validados'].items():
-            if campo not in conteo_campos:
-                conteo_campos[campo] = {'Cumple': 0, 'No cumple': 0}
+        for campo, estado_campo in datos_ot['campos_bar'].items():
             conteo_campos[campo][estado_campo] += 1
 
     df_resumen = pd.DataFrame(lista_resumen)
@@ -327,23 +433,26 @@ else:
     g1, g2 = st.columns(2)
     with g1:
         st.write("**Campos Revisados**")
-        if len(conteo_campos) > 0:
-            df_conteo = pd.DataFrame([
-                {
-                    'Campo': campo,
-                    'Porcentaje': (v['No cumple'] / total_ot) * 100 if total_ot > 0 else 0
-                }
-                for campo, v in conteo_campos.items()
-            ]).sort_values('Porcentaje', ascending=True)
+        filas_barras = []
+        for campo in BAR_ITEMS_ORDEN:
+            v = conteo_campos[campo]
+            total = v['Cumple'] + v['No cumple']
+            pct_cumple = (v['Cumple'] / total * 100) if total > 0 else 100
+            pct_no_cumple = (v['No cumple'] / total * 100) if total > 0 else 0
+            filas_barras.append({'Campo': campo, 'Estado': 'Cumple', 'Porcentaje': pct_cumple})
+            filas_barras.append({'Campo': campo, 'Estado': 'No cumple', 'Porcentaje': pct_no_cumple})
 
-            fig_bar = px.bar(
-                df_conteo, x='Porcentaje', y='Campo', orientation='h',
-                color_discrete_sequence=[COLOR_ROJO]
-            )
-            fig_bar.update_layout(height=550, margin=dict(l=0, r=0, t=10, b=0))
-            st.plotly_chart(fig_bar, use_container_width=True)
-        else:
-            st.info("No hay datos de campos para mostrar.")
+        df_barras = pd.DataFrame(filas_barras)
+
+        fig_bar = px.bar(
+            df_barras, x='Porcentaje', y='Campo', color='Estado', orientation='h',
+            category_orders={'Campo': BAR_ITEMS_ORDEN[::-1]},
+            color_discrete_map={'Cumple': COLOR_VERDE, 'No cumple': COLOR_ROJO}
+        )
+        fig_bar.update_layout(
+            barmode='stack', height=550, margin=dict(l=0, r=0, t=10, b=0), legend_title_text=''
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
 
     with g2:
         st.write("**Total OT Revisadas**")
