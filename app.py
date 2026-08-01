@@ -134,6 +134,8 @@ def procesar_archivo_ot(file_bytes):
         "estado": "Cumple",
         "categoria": "-",
         "seccion": "-",
+        "jefe_turno_nombre": "Sin dato",
+        "tecnico_nombre": "Sin dato",
         "campos_bar": {item: "Cumple" for item in BAR_ITEMS_ORDEN}
     }
     try:
@@ -150,6 +152,12 @@ def procesar_archivo_ot(file_bytes):
         if val_equipo and str(val_equipo).strip(): resultado["equipo"] = str(val_equipo).strip()
         if val_orden and str(val_orden).strip(): resultado["orden"] = str(val_orden).strip()
         if val_turno and str(val_turno).strip(): resultado["turno"] = str(val_turno).strip()
+
+        # --- NOMBRES PARA "ENCARGADO DE OT" ---
+        nombre_jefe = _limpiar(sheet['C238'].value)
+        nombre_tecnico = _limpiar(sheet['BD239'].value)
+        resultado["jefe_turno_nombre"] = nombre_jefe if nombre_jefe else "Sin dato"
+        resultado["tecnico_nombre"] = nombre_tecnico if nombre_tecnico else "Sin dato"
 
         # --- CAMPOS MAESTROS: (etiqueta, celda, categoría, sección) ---
         CAMPOS_MAESTRO = [
@@ -243,37 +251,43 @@ def procesar_archivo_ot(file_bytes):
         bar_resumen_cumple = not resumen_vacio
 
         # --- LÓGICA SIMS ---
-        # Si en E205, AB25 o B98 aparece "cambio"/"cambia"/"reemplaza", se exige el bloque SIMS.
-        texto_disparador = _quitar_tildes(" ".join([
-            _limpiar(sheet['E205'].value),
-            _limpiar(sheet['AB25'].value),
-            _limpiar(sheet['B98'].value)
-        ]).upper())
-        palabras_gatillo = ["CAMBIO", "CAMBIA", "REEMPLAZA"]
-        requiere_sims = any(p in texto_disparador for p in palabras_gatillo)
-
-        campos_sims = {
-            'N° PIEZA QUE FALLÓ': sheet['B189'].value,
-            'DESCRIPCIÓN DE LA PIEZA': sheet['E189'].value,
-            'CANTIDAD': sheet['X189'].value,
-            'CÓDIGO SERVICIO': sheet['AA189'].value,
-            'N° GRUPO': sheet['AE189'].value,
-            'DESCRIPCIÓN DEL GRUPO': sheet['AJ189'].value,
-            '¿LLEGÓ AL FIN DE SU VIDA ÚTIL?': sheet['AR189'].value,
-            'COMENTARIOS': sheet['AU189'].value,
-        }
-        sims_faltantes = [k for k, v in campos_sims.items() if _limpiar(v) == ""]
+        # AU189 ya NO se revisa como campo del bloque SIMS. En cambio, si en AU189
+        # está escrito "N/A SIMS", la OT se considera directamente "No aplica SIMS".
+        au189_normalizado = " ".join(_limpiar(sheet['AU189'].value).upper().split())
+        no_aplica_sims = (au189_normalizado == "N/A SIMS")
 
         bar_sims_cumple = True
-        if requiere_sims:
-            if len(sims_faltantes) == len(campos_sims):
-                campos_con_hallazgo.append(("Falta SIMS", "Crítico", "Registro Informe SIMS"))
-                bar_sims_cumple = False
-            elif len(sims_faltantes) > 0:
-                campos_con_hallazgo.append(
-                    (f"SIMS incompleto: falta {', '.join(sims_faltantes)}", "Crítico", "Registro Informe SIMS")
-                )
-                bar_sims_cumple = False
+        if not no_aplica_sims:
+            # Si en E205, AB25 o B98 aparece "cambio"/"cambia"/"reemplaza", se exige el bloque SIMS.
+            texto_disparador = _quitar_tildes(" ".join([
+                _limpiar(sheet['E205'].value),
+                _limpiar(sheet['AB25'].value),
+                _limpiar(sheet['B98'].value)
+            ]).upper())
+            palabras_gatillo = ["CAMBIO", "CAMBIA", "REEMPLAZA"]
+            requiere_sims = any(p in texto_disparador for p in palabras_gatillo)
+
+            campos_sims = {
+                'N° PIEZA QUE FALLÓ': sheet['B189'].value,
+                'DESCRIPCIÓN DE LA PIEZA': sheet['E189'].value,
+                'CANTIDAD': sheet['X189'].value,
+                'CÓDIGO SERVICIO': sheet['AA189'].value,
+                'N° GRUPO': sheet['AE189'].value,
+                'DESCRIPCIÓN DEL GRUPO': sheet['AJ189'].value,
+                '¿LLEGÓ AL FIN DE SU VIDA ÚTIL?': sheet['AR189'].value,
+            }
+            sims_faltantes = [k for k, v in campos_sims.items() if _limpiar(v) == ""]
+
+            if requiere_sims:
+                if len(sims_faltantes) == len(campos_sims):
+                    campos_con_hallazgo.append(("Falta SIMS", "Crítico", "Registro Informe SIMS"))
+                    bar_sims_cumple = False
+                elif len(sims_faltantes) > 0:
+                    campos_con_hallazgo.append(
+                        (f"SIMS incompleto: falta {', '.join(sims_faltantes)}", "Crítico", "Registro Informe SIMS")
+                    )
+                    bar_sims_cumple = False
+        # Si no_aplica_sims es True, bar_sims_cumple se mantiene en True y no se agrega ningún hallazgo.
 
         # --- Consolidación de los 14 ítems del gráfico de barras ---
         resultado["campos_bar"] = {
@@ -297,7 +311,8 @@ def procesar_archivo_ot(file_bytes):
         cant_faltantes = len(campos_con_hallazgo)
         resultado["faltantes"] = cant_faltantes
         if cant_faltantes > 0:
-            resultado["detalle"] = ", ".join([f"{label} ({cat})" for label, cat, _ in campos_con_hallazgo])
+            # Ya NO se agrega la etiqueta (Crítico)/(No Crítico) al texto del detalle.
+            resultado["detalle"] = ", ".join([label for label, _, _ in campos_con_hallazgo])
             resultado["estado"] = "No cumple"
             secciones_unicas = sorted(set(sec for _, _, sec in campos_con_hallazgo))
             resultado["seccion"] = ", ".join(secciones_unicas)
@@ -408,7 +423,9 @@ else:
             'Sección': datos_ot['seccion'],
             'Cant. Faltantes': datos_ot['faltantes'],
             'Detalle Campos Faltantes': datos_ot['detalle'],
-            'Estado': datos_ot['estado']
+            'Estado': datos_ot['estado'],
+            'Jefe de Turno': datos_ot['jefe_turno_nombre'],
+            'Técnico Responsable': datos_ot['tecnico_nombre'],
         })
 
         for campo, estado_campo in datos_ot['campos_bar'].items():
@@ -469,5 +486,29 @@ else:
         st.plotly_chart(fig_pie, use_container_width=True)
 
     # --- TABLA RESUMEN ---
-    st.write("**Resumen por OT**")
-    st.dataframe(df_resumen, use_container_width=True)
+    columnas_resumen = ['Archivo', 'Equipo', 'Orden', 'Turno', 'Categoría', 'Sección',
+                         'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado']
+
+    col_titulo, col_selector = st.columns([2, 2])
+    with col_titulo:
+        st.write("**Resumen por OT**")
+    with col_selector:
+        st.write("**Encargado de OT**")
+        ot_seleccionada = st.selectbox(
+            "Encargado de OT",
+            options=df_resumen['Archivo'].tolist(),
+            label_visibility="collapsed"
+        )
+
+    st.dataframe(df_resumen[columnas_resumen], use_container_width=True)
+
+    if ot_seleccionada:
+        fila = df_resumen[df_resumen['Archivo'] == ot_seleccionada].iloc[0]
+        df_encargado = pd.DataFrame([{
+            'Documento OT': fila['Archivo'],
+            'Jefe de Turno': fila['Jefe de Turno'],
+            'Técnico Responsable': fila['Técnico Responsable'],
+            'Sección': fila['Sección'],
+            'Detalle Campo Faltante': fila['Detalle Campos Faltantes'],
+        }])
+        st.dataframe(df_encargado, use_container_width=True, hide_index=True)
