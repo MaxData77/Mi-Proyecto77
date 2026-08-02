@@ -47,23 +47,24 @@ st.markdown("""
     .metric-card {
         background-color: #000000;
         color: white;
-        padding: 10px 15px;
-        border-radius: 12px;
+        padding: 6px 15px;
+        border-radius: 10px;
+        border: 1px solid #FFC000;
         text-align: center;
         box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.3);
     }
     .metric-card h3 {
         color: #FFFFFF !important;
-        font-size: 19px !important;
+        font-size: 15px !important;
         font-weight: 600 !important;
         margin-bottom: 0px !important;
     }
     .metric-card h1 {
         color: #FFFFFF !important;
-        font-size: 40px !important;
+        font-size: 30px !important;
         font-weight: bold !important;
         margin: 0 !important;
-        line-height: 1.1;
+        line-height: 1.2;
     }
     .upload-container {
         background-color: #000000;
@@ -391,13 +392,14 @@ if not ejecutar or not uploaded_files:
 
     g1, g2 = st.columns(2)
     with g1:
-        st.write("**Campos Revisados**")
+        st.write("**Cumplimiento de Campos por OT**")
         df_empty_bar = pd.DataFrame({'Campo': ['Esperando archivos...'], 'Porcentaje': [0]})
         fig_bar = px.bar(df_empty_bar, x='Porcentaje', y='Campo', orientation='h', color_discrete_sequence=['#CCCCCC'])
         fig_bar.update_layout(height=550, margin=dict(l=0, r=0, t=10, b=0))
+        fig_bar.update_xaxes(title_text='Porcentaje de campos por OT')
         st.plotly_chart(fig_bar, use_container_width=True)
     with g2:
-        st.write("**Total OT Revisadas**")
+        st.write("**Cumplimiento general por OT**")
         df_empty_pie = pd.DataFrame({'Estado': ['Sin datos'], 'Cantidad': [1]})
         fig_pie = px.pie(df_empty_pie, values='Cantidad', names='Estado', hole=0.6, color_discrete_sequence=['#CCCCCC'])
         fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
@@ -449,7 +451,7 @@ else:
     # --- GRÁFICAS ---
     g1, g2 = st.columns(2)
     with g1:
-        st.write("**Campos Revisados**")
+        st.write("**Cumplimiento de Campos por OT**")
         filas_barras = []
         for campo in BAR_ITEMS_ORDEN:
             v = conteo_campos[campo]
@@ -464,15 +466,24 @@ else:
         fig_bar = px.bar(
             df_barras, x='Porcentaje', y='Campo', color='Estado', orientation='h',
             category_orders={'Campo': BAR_ITEMS_ORDEN[::-1]},
-            color_discrete_map={'Cumple': COLOR_VERDE, 'No cumple': COLOR_ROJO}
+            color_discrete_map={'Cumple': COLOR_VERDE, 'No cumple': COLOR_ROJO},
+            text=df_barras['Porcentaje'].apply(lambda p: f'{p:.1f}%' if p > 0 else '')
         )
+        fig_bar.update_traces(textposition='inside', insidetextanchor='middle')
+        # Texto negro dentro de la barra verde (Cumple) y texto blanco dentro de la roja (No cumple)
+        for trace in fig_bar.data:
+            if trace.name == 'Cumple':
+                trace.textfont = dict(color='black', size=12)
+            else:
+                trace.textfont = dict(color='white', size=12)
         fig_bar.update_layout(
             barmode='stack', height=550, margin=dict(l=0, r=0, t=10, b=0), legend_title_text=''
         )
+        fig_bar.update_xaxes(title_text='Porcentaje de campos por OT')
         st.plotly_chart(fig_bar, use_container_width=True)
 
     with g2:
-        st.write("**Total OT Revisadas**")
+        st.write("**Cumplimiento general por OT**")
         df_pie = pd.DataFrame({
             'Estado': ['Cumple', 'No cumple'],
             'Cantidad': [ot_completas, ot_con_observacion]
@@ -481,6 +492,12 @@ else:
             df_pie, values='Cantidad', names='Estado', hole=0.6,
             color='Estado',
             color_discrete_map={'Cumple': COLOR_VERDE, 'No cumple': COLOR_ROJO}
+        )
+        # Muestra el total de OT (cumple/no cumple) y el porcentaje dentro de cada porción
+        fig_pie.update_traces(
+            texttemplate='%{label}<br>%{value} OT (%{percent})',
+            textposition='inside',
+            textfont=dict(color='white', size=13)
         )
         fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
         st.plotly_chart(fig_pie, use_container_width=True)
