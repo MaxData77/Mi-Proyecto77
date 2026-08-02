@@ -484,22 +484,25 @@ else:
 
     with g2:
         st.write("**Cumplimiento general por OT**")
+        etiqueta_cumple = f'Cumple {ot_completas} OT'
+        etiqueta_no_cumple = f'No cumple {ot_con_observacion} OT'
         df_pie = pd.DataFrame({
-            'Estado': ['Cumple', 'No cumple'],
+            'Estado': [etiqueta_cumple, etiqueta_no_cumple],
             'Cantidad': [ot_completas, ot_con_observacion]
         })
         fig_pie = px.pie(
             df_pie, values='Cantidad', names='Estado', hole=0.6,
             color='Estado',
-            color_discrete_map={'Cumple': COLOR_VERDE, 'No cumple': COLOR_ROJO}
+            color_discrete_map={etiqueta_cumple: COLOR_VERDE, etiqueta_no_cumple: COLOR_ROJO}
         )
-        # Muestra el total de OT (cumple/no cumple) y el porcentaje dentro de cada porción
+        # Solo el porcentaje dentro de la dona: negro sobre verde, blanco sobre rojo.
+        # El total de OT (cumple/no cumple) queda en la leyenda, dentro del recuadro del gráfico.
         fig_pie.update_traces(
-            texttemplate='%{label}<br>%{value} OT (%{percent})',
+            texttemplate='%{percent}',
             textposition='inside',
-            textfont=dict(color='white', size=13)
+            textfont=dict(color=['black', 'white'], size=13)
         )
-        fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
+        fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0), legend_title_text='')
         st.plotly_chart(fig_pie, use_container_width=True)
 
     # --- TABLA RESUMEN ---
