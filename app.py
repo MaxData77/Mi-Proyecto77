@@ -101,6 +101,14 @@ st.markdown("""
         text-align: center;
         margin-top: 6px;
     }
+    /* Línea indicadora de la pestaña activa (Resumen por OT / Encargado de OT) en verde */
+    div[data-baseweb="tab-highlight"] {
+        background-color: #00CC00 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] p {
+        color: #00CC00 !important;
+        font-weight: 700 !important;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -505,27 +513,28 @@ else:
         fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0), legend_title_text='')
         st.plotly_chart(fig_pie, use_container_width=True)
 
-    # --- TABLA RESUMEN ---
+    # --- TABLA RESUMEN Y ENCARGADO DE OT (en pestañas) ---
     columnas_resumen = ['Archivo', 'Equipo', 'Orden', 'Turno', 'Categoría', 'Sección',
                          'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado']
 
-    col_titulo, col_popover, col_resto = st.columns([2, 1.3, 6])
-    with col_titulo:
-        st.write("**Resumen por OT**")
-    with col_popover:
-        with st.popover("Encargado de OT"):
-            ot_seleccionada = st.selectbox(
-                "Seleccionar OT",
-                options=df_resumen['Archivo'].tolist()
-            )
-            fila = df_resumen[df_resumen['Archivo'] == ot_seleccionada].iloc[0]
-            df_encargado = pd.DataFrame([{
-                'Documento OT': fila['Archivo'],
-                'Jefe de Turno': fila['Jefe de Turno'],
-                'Técnico Responsable': fila['Técnico Responsable'],
-                'Sección': fila['Sección'],
-                'Detalle Campo Faltante': fila['Detalle Campos Faltantes'],
-            }])
-            st.dataframe(df_encargado, use_container_width=True, hide_index=True)
+    tab_resumen, tab_encargado = st.tabs(["Resumen por OT", "Encargado de OT"])
+
+    with tab_resumen:
+        st.dataframe(df_resumen[columnas_resumen], use_container_width=True)
+
+    with tab_encargado:
+        ot_seleccionada = st.selectbox(
+            "Seleccionar OT",
+            options=df_resumen['Archivo'].tolist()
+        )
+        fila = df_resumen[df_resumen['Archivo'] == ot_seleccionada].iloc[0]
+        df_encargado = pd.DataFrame([{
+            'Documento OT': fila['Archivo'],
+            'Jefe de Turno': fila['Jefe de Turno'],
+            'Técnico Responsable': fila['Técnico Responsable'],
+            'Sección': fila['Sección'],
+            'Detalle Campo Faltante': fila['Detalle Campos Faltantes'],
+        }])
+        st.dataframe(df_encargado, use_container_width=True, hide_index=True)
 
     st.dataframe(df_resumen[columnas_resumen], use_container_width=True)
