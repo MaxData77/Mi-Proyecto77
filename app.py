@@ -509,26 +509,23 @@ else:
     columnas_resumen = ['Archivo', 'Equipo', 'Orden', 'Turno', 'Categoría', 'Sección',
                          'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado']
 
-    col_titulo, col_selector = st.columns([2, 2])
+    col_titulo, col_popover, col_resto = st.columns([2, 1.3, 6])
     with col_titulo:
         st.write("**Resumen por OT**")
-    with col_selector:
-        st.write("**Encargado de OT**")
-        ot_seleccionada = st.selectbox(
-            "Encargado de OT",
-            options=df_resumen['Archivo'].tolist(),
-            label_visibility="collapsed"
-        )
+    with col_popover:
+        with st.popover("Encargado de OT"):
+            ot_seleccionada = st.selectbox(
+                "Seleccionar OT",
+                options=df_resumen['Archivo'].tolist()
+            )
+            fila = df_resumen[df_resumen['Archivo'] == ot_seleccionada].iloc[0]
+            df_encargado = pd.DataFrame([{
+                'Documento OT': fila['Archivo'],
+                'Jefe de Turno': fila['Jefe de Turno'],
+                'Técnico Responsable': fila['Técnico Responsable'],
+                'Sección': fila['Sección'],
+                'Detalle Campo Faltante': fila['Detalle Campos Faltantes'],
+            }])
+            st.dataframe(df_encargado, use_container_width=True, hide_index=True)
 
     st.dataframe(df_resumen[columnas_resumen], use_container_width=True)
-
-    if ot_seleccionada:
-        fila = df_resumen[df_resumen['Archivo'] == ot_seleccionada].iloc[0]
-        df_encargado = pd.DataFrame([{
-            'Documento OT': fila['Archivo'],
-            'Jefe de Turno': fila['Jefe de Turno'],
-            'Técnico Responsable': fila['Técnico Responsable'],
-            'Sección': fila['Sección'],
-            'Detalle Campo Faltante': fila['Detalle Campos Faltantes'],
-        }])
-        st.dataframe(df_encargado, use_container_width=True, hide_index=True)
