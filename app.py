@@ -523,18 +523,12 @@ else:
         st.dataframe(df_resumen[columnas_resumen], use_container_width=True)
 
     with tab_encargado:
-        ot_seleccionada = st.selectbox(
-            "Seleccionar OT",
-            options=df_resumen['Archivo'].tolist()
-        )
-        fila = df_resumen[df_resumen['Archivo'] == ot_seleccionada].iloc[0]
-        df_encargado = pd.DataFrame([{
-            'Documento OT': fila['Archivo'],
-            'Jefe de Turno': fila['Jefe de Turno'],
-            'Técnico Responsable': fila['Técnico Responsable'],
-            'Sección': fila['Sección'],
-            'Detalle Campo Faltante': fila['Detalle Campos Faltantes'],
-        }])
-        st.dataframe(df_encargado, use_container_width=True, hide_index=True)
-
-    st.dataframe(df_resumen[columnas_resumen], use_container_width=True)
+        df_no_cumple = df_resumen[df_resumen['Estado'] == 'No cumple'].copy()
+        if df_no_cumple.empty:
+            st.info("No hay OT con observaciones: todas están completas.")
+        else:
+            df_encargado = df_no_cumple.rename(columns={
+                'Archivo': 'Documento OT',
+                'Detalle Campos Faltantes': 'Detalle Campo Faltante',
+            })[['Documento OT', 'Jefe de Turno', 'Técnico Responsable', 'Sección', 'Detalle Campo Faltante']]
+            st.dataframe(df_encargado, use_container_width=True, hide_index=True)
