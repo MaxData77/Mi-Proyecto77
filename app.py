@@ -135,9 +135,9 @@ def _esta_marcado(valor):
 # 3. Función de Procesamiento con Todas las Reglas de Negocio Oficiales
 def procesar_archivo_ot(file_bytes):
     resultado = {
-        "equipo": "Sin equipo",
-        "orden": "OT Sin Orden",
-        "turno": "N/A",
+        "equipo": "OT sin equipo",
+        "orden": "OT sin orden",
+        "turno": "OT sin turno",
         "faltantes": 0,
         "detalle": "Ninguno",
         "estado": "Cumple",
@@ -154,13 +154,25 @@ def procesar_archivo_ot(file_bytes):
         sheet = wb.active
 
         # --- EXTRACCIÓN DE DATOS DE CABECERA (para columnas Equipo/Orden/Turno) ---
-        val_equipo = sheet['G7'].value
-        val_orden = sheet['J42'].value or sheet['G25'].value
-        val_turno = sheet['G19'].value
+        val_equipo = _limpiar(sheet['G7'].value)
+        resultado["equipo"] = val_equipo if val_equipo else "OT sin equipo"
 
-        if val_equipo and str(val_equipo).strip(): resultado["equipo"] = str(val_equipo).strip()
-        if val_orden and str(val_orden).strip(): resultado["orden"] = str(val_orden).strip()
-        if val_turno and str(val_turno).strip(): resultado["turno"] = str(val_turno).strip()
+        val_turno = _limpiar(sheet['G19'].value)
+        resultado["turno"] = val_turno if val_turno else "OT sin turno"
+
+        # Orden: usa J42 si es válido, si no G25; si ambas están vacías o dicen "no" -> "OT sin orden"
+        val_j42 = _limpiar(sheet['J42'].value)
+        val_g25 = _limpiar(sheet['G25'].value)
+
+        def _valor_valido_orden(v):
+            return v != "" and v.upper() != "NO"
+
+        if _valor_valido_orden(val_j42):
+            resultado["orden"] = val_j42
+        elif _valor_valido_orden(val_g25):
+            resultado["orden"] = val_g25
+        else:
+            resultado["orden"] = "OT sin orden"
 
         # --- NOMBRES PARA "ENCARGADO DE OT" ---
         nombre_jefe = _limpiar(sheet['C238'].value)
@@ -414,7 +426,7 @@ if not ejecutar or not uploaded_files:
         st.plotly_chart(fig_pie, use_container_width=True)
 
     st.write("**Resumen por OT**")
-    df_empty_table = pd.DataFrame(columns=['Archivo', 'Equipo', 'Orden', 'Turno', 'Categoría', 'Sección', 'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado'])
+    df_empty_table = pd.DataFrame(columns=['Documento OT', 'Equipo', 'Orden', 'Turno', 'Categoría', 'Sección', 'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado'])
     st.dataframe(df_empty_table, use_container_width=True)
 
 else:
@@ -425,7 +437,7 @@ else:
     for f in uploaded_files:
         datos_ot = procesar_archivo_ot(f)
         lista_resumen.append({
-            'Archivo': f.name,
+            'Documento OT': f.name,
             'Equipo': datos_ot['equipo'],
             'Orden': datos_ot['orden'],
             'Turno': datos_ot['turno'],
@@ -442,6 +454,8 @@ else:
             conteo_campos[campo][estado_campo] += 1
 
     df_resumen = pd.DataFrame(lista_resumen)
+    df_resumen.index = range(1, len(df_resumen) + 1)
+    df_resumen.index.name = "Qty"
 
     total_ot = len(df_resumen)
     ot_con_observacion = int((df_resumen['Estado'] == 'No cumple').sum())
@@ -514,7 +528,7 @@ else:
         st.plotly_chart(fig_pie, use_container_width=True)
 
     # --- TABLA RESUMEN Y ENCARGADO DE OT (en pestañas) ---
-    columnas_resumen = ['Archivo', 'Equipo', 'Orden', 'Turno', 'Categoría', 'Sección',
+    columnas_resumen = ['Documento OT', 'Equipo', 'Orden', 'Turno', 'Categoría', 'Sección',
                          'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado']
 
     tab_resumen, tab_encargado = st.tabs(["Resumen por OT", "Encargado de OT"])
@@ -528,7 +542,6 @@ else:
             st.info("No hay OT con observaciones: todas están completas.")
         else:
             df_encargado = df_no_cumple.rename(columns={
-                'Archivo': 'Documento OT',
                 'Detalle Campos Faltantes': 'Detalle Campo Faltante',
             })[['Documento OT', 'Jefe de Turno', 'Técnico Responsable', 'Sección', 'Detalle Campo Faltante']]
             st.dataframe(df_encargado, use_container_width=True, hide_index=True)
