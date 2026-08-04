@@ -227,6 +227,8 @@ def procesar_archivo_ot(file_bytes):
                 no_cumple = True
             elif label == 'CÓDIGO CAUSA' and val_str in ["6.6", "6,6", "7.1", "7,1"]:
                 no_cumple = True
+            elif label == 'ORDEN DE PEDIDO / SALIDA DE BODEGA' and val_str == "NO":
+                no_cumple = True
 
             campos_estado[label] = "No cumple" if no_cumple else "Cumple"
             if no_cumple:
@@ -365,44 +367,19 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
 
-    uploaded_files = st.file_uploader("", accept_multiple_files=True, type=['xlsx'])
+    if "uploader_key" not in st.session_state:
+        st.session_state.uploader_key = 0
 
-    if uploaded_files:
-        total_archivos = len(uploaded_files)
-        total_paginas = max(1, (total_archivos - 1) // ARCHIVOS_POR_PAGINA + 1)
-
-        if "pagina_archivos" not in st.session_state:
-            st.session_state.pagina_archivos = 1
-        if st.session_state.pagina_archivos > total_paginas:
-            st.session_state.pagina_archivos = total_paginas
-
-        pagina_actual = st.session_state.pagina_archivos
-        inicio = (pagina_actual - 1) * ARCHIVOS_POR_PAGINA
-        fin = inicio + ARCHIVOS_POR_PAGINA
-
-        for f in uploaded_files[inicio:fin]:
-            tamano_kb = f.size / 1024
-            st.markdown(
-                f'<div class="file-pill">📄 {f.name}<br><small>{tamano_kb:.1f} KB</small></div>',
-                unsafe_allow_html=True
-            )
-
-        col_prev, col_info, col_next = st.columns([1, 2, 1])
-        with col_prev:
-            if st.button("◀", disabled=(pagina_actual <= 1), use_container_width=True):
-                st.session_state.pagina_archivos -= 1
-                st.rerun()
-        with col_info:
-            st.markdown(
-                f'<div class="file-page-info">Página {pagina_actual} de {total_paginas}</div>',
-                unsafe_allow_html=True
-            )
-        with col_next:
-            if st.button("▶", disabled=(pagina_actual >= total_paginas), use_container_width=True):
-                st.session_state.pagina_archivos += 1
-                st.rerun()
+    uploaded_files = st.file_uploader(
+        "", accept_multiple_files=True, type=['xlsx'],
+        key=f"uploader_{st.session_state.uploader_key}"
+    )
 
     ejecutar = st.button("Ejecutar revisión", use_container_width=True)
+
+    if st.button("🗑️ Borrar archivos", use_container_width=True):
+        st.session_state.uploader_key += 1
+        st.rerun()
 
 # ================= CONTENIDO PRINCIPAL (Dashboard Analítico) =================
 if not ejecutar or not uploaded_files:
