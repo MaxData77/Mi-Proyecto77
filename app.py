@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-COLOR_VERDE = "#00FF00"
+COLOR_VERDE = "#4C68A2"
 COLOR_ROJO = "#FF0000"
 ARCHIVOS_POR_PAGINA = 3
 
@@ -42,10 +42,10 @@ BAR_ITEMS_ORDEN = [
 st.markdown("""
     <style>
     .stApp {
-        background-color: #FFC000 !important;
+        background-color: #C6DAF8 !important;
     }
     .metric-card {
-        background-color: #000000;
+        background-color: #4C68A2;
         color: white;
         padding: 6px 15px;
         border-radius: 10px;
@@ -55,13 +55,13 @@ st.markdown("""
     }
     .metric-card h3 {
         color: #FFFFFF !important;
-        font-size: 15px !important;
+        font-size: 17px !important;
         font-weight: 600 !important;
         margin-bottom: 0px !important;
     }
     .metric-card h1 {
         color: #FFFFFF !important;
-        font-size: 30px !important;
+        font-size: 34px !important;
         font-weight: bold !important;
         margin: 0 !important;
         line-height: 1.2;
@@ -145,6 +145,7 @@ def procesar_archivo_ot(file_bytes):
         "seccion": "-",
         "jefe_turno_nombre": "Sin dato",
         "tecnico_nombre": "Sin dato",
+        "sims_estado": "Sin datos",
         "campos_bar": {item: "Cumple" for item in BAR_ITEMS_ORDEN}
     }
     try:
@@ -279,6 +280,27 @@ def procesar_archivo_ot(file_bytes):
         au189_normalizado = " ".join(_limpiar(sheet['AU189'].value).upper().split())
         no_aplica_sims = (au189_normalizado == "N/A SIMS")
 
+        campos_sims = {
+            'N° PIEZA QUE FALLÓ': sheet['B189'].value,
+            'DESCRIPCIÓN DE LA PIEZA': sheet['E189'].value,
+            'CANTIDAD': sheet['X189'].value,
+            'CÓDIGO SERVICIO': sheet['AA189'].value,
+            'N° GRUPO': sheet['AE189'].value,
+            'DESCRIPCIÓN DEL GRUPO': sheet['AJ189'].value,
+            '¿LLEGÓ AL FIN DE SU VIDA ÚTIL?': sheet['AR189'].value,
+        }
+        sims_faltantes = [k for k, v in campos_sims.items() if _limpiar(v) == ""]
+
+        # --- Estado para la pestaña "Registro Sims" (siempre se calcula, sin importar el gatillo) ---
+        if no_aplica_sims:
+            resultado["sims_estado"] = "No aplica SIMS"
+        elif len(sims_faltantes) == 0:
+            resultado["sims_estado"] = "Sims completo"
+        elif len(sims_faltantes) == len(campos_sims):
+            resultado["sims_estado"] = "Falta SIMS"
+        else:
+            resultado["sims_estado"] = "Sims incompleto"
+
         bar_sims_cumple = True
         if not no_aplica_sims:
             # Si en E205, AB25 o B98 aparece "cambio"/"cambia"/"reemplaza", se exige el bloque SIMS.
@@ -289,17 +311,6 @@ def procesar_archivo_ot(file_bytes):
             ]).upper())
             palabras_gatillo = ["CAMBIO", "CAMBIA", "REEMPLAZA"]
             requiere_sims = any(p in texto_disparador for p in palabras_gatillo)
-
-            campos_sims = {
-                'N° PIEZA QUE FALLÓ': sheet['B189'].value,
-                'DESCRIPCIÓN DE LA PIEZA': sheet['E189'].value,
-                'CANTIDAD': sheet['X189'].value,
-                'CÓDIGO SERVICIO': sheet['AA189'].value,
-                'N° GRUPO': sheet['AE189'].value,
-                'DESCRIPCIÓN DEL GRUPO': sheet['AJ189'].value,
-                '¿LLEGÓ AL FIN DE SU VIDA ÚTIL?': sheet['AR189'].value,
-            }
-            sims_faltantes = [k for k, v in campos_sims.items() if _limpiar(v) == ""]
 
             if requiere_sims:
                 if len(sims_faltantes) == len(campos_sims):
@@ -425,6 +436,7 @@ else:
             'Estado': datos_ot['estado'],
             'Jefe de Turno': datos_ot['jefe_turno_nombre'],
             'Técnico Responsable': datos_ot['tecnico_nombre'],
+            'Estado SIMS': datos_ot['sims_estado'],
         })
 
         for campo, estado_campo in datos_ot['campos_bar'].items():
@@ -469,10 +481,10 @@ else:
             text=df_barras['Porcentaje'].apply(lambda p: f'{p:.1f}%' if p > 0 else '')
         )
         fig_bar.update_traces(textposition='inside', insidetextanchor='middle')
-        # Texto negro dentro de la barra verde (Cumple) y texto blanco dentro de la roja (No cumple)
+        # Texto blanco dentro de ambas barras (azul #4C68A2 y roja) para buen contraste
         for trace in fig_bar.data:
             if trace.name == 'Cumple':
-                trace.textfont = dict(color='black', size=12)
+                trace.textfont = dict(color='white', size=12)
             else:
                 trace.textfont = dict(color='white', size=12)
         fig_bar.update_layout(
@@ -494,21 +506,21 @@ else:
             color='Estado',
             color_discrete_map={etiqueta_cumple: COLOR_VERDE, etiqueta_no_cumple: COLOR_ROJO}
         )
-        # Solo el porcentaje dentro de la dona: negro sobre verde, blanco sobre rojo.
+        # Solo el porcentaje dentro de la dona: texto blanco en ambas franjas (azul y roja).
         # El total de OT (cumple/no cumple) queda en la leyenda, dentro del recuadro del gráfico.
         fig_pie.update_traces(
             texttemplate='%{percent}',
             textposition='inside',
-            textfont=dict(color=['black', 'white'], size=13)
+            textfont=dict(color=['white', 'white'], size=13)
         )
         fig_pie.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0), legend_title_text='')
         st.plotly_chart(fig_pie, use_container_width=True)
 
-    # --- TABLA RESUMEN Y ENCARGADO DE OT (en pestañas) ---
+    # --- TABLA RESUMEN, ENCARGADO DE OT Y REGISTRO SIMS (en pestañas) ---
     columnas_resumen = ['Documento OT', 'Equipo', 'Orden', 'Turno', 'Categoría', 'Sección',
                          'Cant. Faltantes', 'Detalle Campos Faltantes', 'Estado']
 
-    tab_resumen, tab_encargado = st.tabs(["Resumen por OT", "Encargado de OT"])
+    tab_resumen, tab_encargado, tab_sims = st.tabs(["Resumen por OT", "Encargado de OT", "Registro Sims"])
 
     with tab_resumen:
         st.dataframe(df_resumen[columnas_resumen], use_container_width=True)
@@ -522,3 +534,9 @@ else:
                 'Detalle Campos Faltantes': 'Detalle Campo Faltante',
             })[['Documento OT', 'Jefe de Turno', 'Técnico Responsable', 'Sección', 'Detalle Campo Faltante']]
             st.dataframe(df_encargado, use_container_width=True, hide_index=True)
+
+    with tab_sims:
+        df_sims = df_resumen.rename(columns={
+            'Estado SIMS': 'Estado',
+        })[['Documento OT', 'Jefe de Turno', 'Técnico Responsable', 'Sección', 'Estado']]
+        st.dataframe(df_sims, use_container_width=True, hide_index=True)
