@@ -536,7 +536,7 @@ else:
             st.dataframe(df_encargado, use_container_width=True, hide_index=True)
 
     with tab_sims:
-        df_sims = df_resumen.rename(columns={
-            'Estado SIMS': 'Estado',
-        })[['Documento OT', 'Jefe de Turno', 'Técnico Responsable', 'Sección', 'Estado']]
+        df_sims = df_resumen[['Documento OT', 'Jefe de Turno', 'Técnico Responsable', 'Sección', 'Estado SIMS']].rename(
+            columns={'Estado SIMS': 'Estado'}
+        )
         st.dataframe(df_sims, use_container_width=True, hide_index=True)
